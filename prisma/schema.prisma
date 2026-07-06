@@ -1,0 +1,202 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  DRIVER
+  CUSTOMER
+}
+
+enum VehicleType {
+  SEDAN
+  SUV
+}
+
+enum BookingType {
+  LOCAL
+  OUTSTATION
+  AIRPORT
+  MONTHLY
+  EVENT
+}
+
+enum BookingStatus {
+  REQUESTED
+  ACCEPTED
+  STARTED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  COMPANY
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String?
+  name         String
+  phone        String?
+  role         Role      @default(CUSTOMER)
+  profilePic   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  bookingsAsCustomer Booking[]   @relation("CustomerBookings")
+  bookingsAsDriver   Booking[]   @relation("DriverBookings")
+  driverStatus       DriverStatus?
+  driverVehicles     Vehicle[]
+  ratingsGiven       Rating[]    @relation("Rater")
+  ratingsReceived    Rating[]    @relation("Rated")
+  cancellations      Cancellation[]
+  adminPassword      String?
+  cabDriverProfile   CabDriverProfile?
+
+  @@index([role])
+  @@index([email])
+}
+
+model DriverStatus {
+  id        String   @id @default(uuid())
+  driverId  String   @unique
+  driver    User     @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  online    Boolean  @default(false)
+  lat       Float?
+  lng       Float?
+  updatedAt DateTime @updatedAt
+
+  @@index([online])
+}
+
+model CabDriverProfile {
+  id               String   @id @default(uuid())
+  driverId         String   @unique
+  driver           User     @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  licenseNumber    String?
+  licenseExpiry    DateTime?
+  address          String?
+  city             String?
+  state            String?
+  zipCode          String?
+  backgroundCheck  Boolean  @default(false)
+  experienceYears  Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Vehicle {
+  id          String      @id @default(uuid())
+  plateNumber String      @unique
+  model       String
+  color       String
+  capacity    Int
+  type        VehicleType
+  driverId    String?
+  driver      User?       @relation(fields: [driverId], references: [id])
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  image       String?
+
+  bookings    Booking[]
+
+  @@index([type])
+  @@index([driverId])
+}
+
+model Booking {
+  id            String        @id @default(uuid())
+  customerId    String
+  customer      User          @relation("CustomerBookings", fields: [customerId], references: [id])
+  driverId      String?
+  driver        User?         @relation("DriverBookings", fields: [driverId], references: [id])
+  vehicleId     String?
+  vehicle       Vehicle?      @relation(fields: [vehicleId], references: [id])
+
+  bookingType   BookingType
+  pickupAddress String
+  dropAddress   String        @default("")
+  pickupLat     Float?
+  pickupLng     Float?
+  dropLat       Float?
+  dropLng       Float?
+
+  flightNumber  String?
+
+  scheduledTime DateTime?
+  startTime     DateTime?
+  endTime       DateTime?
+
+  fare          Float
+  distance      Float?
+  duration      Int?
+  paymentMethod PaymentMethod @default(CASH)
+  paymentStatus PaymentStatus @default(PENDING)
+
+  status        BookingStatus @default(REQUESTED)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  rating        Rating?
+  cancellations Cancellation[]
+
+  @@index([customerId])
+  @@index([driverId])
+  @@index([status])
+  @@index([bookingType])
+  @@index([createdAt])
+}
+
+model Rating {
+  id        String   @id @default(uuid())
+  bookingId String   @unique
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  raterId   String
+  rater     User     @relation("Rater", fields: [raterId], references: [id])
+  ratedId   String
+  rated     User     @relation("Rated", fields: [ratedId], references: [id])
+  score     Int      @default(5)
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@index([raterId])
+  @@index([ratedId])
+  @@index([bookingId])
+}
+
+model Cancellation {
+  id            String   @id @default(uuid())
+  bookingId     String
+  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  cancelledBy   User     @relation(fields: [cancelledById], references: [id])
+  cancelledById String
+  reason        String?
+  createdAt     DateTime @default(now())
+
+  @@index([bookingId])
+}
+
+model Pricing {
+  id          String      @id @default(uuid())
+  vehicleType VehicleType @unique
+  baseFare    Float
+  perKm       Float
+  perMinute   Float
+  eventMin    Float
+  eventMax    Float
+  monthlyMin  Float
+  monthlyMax  Float
+  updatedAt   DateTime    @updatedAt
+}

@@ -16,16 +16,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  LayoutDashboard,
   Car,
   Users,
   CalendarCheck,
   CreditCard,
   BarChart3,
+  LayoutDashboard,
   LogOut,
   User,
   Menu,
   X,
+  Phone,
+  MapPin,
 } from "lucide-react";
 
 export function Navbar() {
@@ -42,6 +44,14 @@ export function Navbar() {
   }, []);
 
   const getMenuItems = () => {
+    const commonItems = [
+      { href: "/", label: "Home", icon: LayoutDashboard },
+      { href: "/destinations", label: "Destinations", icon: MapPin },
+      { href: "/tours", label: "Tours", icon: Car },
+      { href: "/services", label: "Services", icon: Car },
+      { href: "/contact", label: "Contact", icon: Phone },
+    ];
+
     if (role === "ADMIN") {
       return [
         { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
@@ -54,19 +64,17 @@ export function Navbar() {
     }
     if (role === "DRIVER") {
       return [
-        { href: "/driver", label: "Dashboard", icon: LayoutDashboard },
-        { href: "/driver/rides", label: "My Rides", icon: CalendarCheck },
-        { href: "/driver/earnings", label: "Earnings", icon: CreditCard },
+        ...commonItems,
+        { href: "/driver", label: "Driver Dashboard", icon: LayoutDashboard },
       ];
     }
     if (role === "CUSTOMER") {
       return [
-        { href: "/customer", label: "Dashboard", icon: LayoutDashboard },
-        { href: "/customer/bookings", label: "Book Ride", icon: Car },
-        { href: "/customer/history", label: "History", icon: CalendarCheck },
+        ...commonItems,
+        { href: "/customer", label: "My Trips", icon: CalendarCheck },
       ];
     }
-    return [];
+    return commonItems;
   };
 
   const menuItems = getMenuItems();
@@ -93,50 +101,46 @@ export function Navbar() {
                 Aradhana Travel
               </span>
             </Link>
-            {session && (
-              <div className="hidden md:flex ml-10 space-x-1">
-                {menuItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = pathname === item.href;
-                  return (
-                    <Link key={item.href} href={item.href}>
-                      <motion.div
-                        whileHover={{ y: -1 }}
-                        className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                          isActive
-                            ? "bg-blue-50 text-blue-700 shadow-sm"
-                            : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                        }`}
-                      >
+            <div className="hidden md:flex ml-10 space-x-1">
+              {menuItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href;
+                return (
+                  <Link key={item.href} href={item.href}>
+                    <motion.div
+                      whileHover={{ y: -1 }}
+                      className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        isActive
+                          ? "bg-blue-50 text-blue-700 shadow-sm"
+                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                      }`}
+                    >
+                      {item.label !== "Home" && item.label !== "Services" && item.label !== "Contact" && (
                         <Icon className="h-4 w-4 mr-2" />
-                        {item.label}
-                        {isActive && (
-                          <motion.div
-                            layoutId="nav-active"
-                            className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"
-                          />
-                        )}
-                      </motion.div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
+                      )}
+                      {item.label}
+                      {isActive && (
+                        <motion.div
+                          layoutId="nav-active"
+                          className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"
+                        />
+                      )}
+                    </motion.div>
+                  </Link>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex items-center space-x-3">
             {session ? (
               <DropdownMenu>
-                <DropdownMenuTrigger className="cursor-pointer">
-                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                    <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-                      <Avatar className="h-9 w-9 ring-2 ring-blue-100">
-                        <AvatarFallback className="bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-700 text-sm font-semibold">
-                          {session.user?.name?.charAt(0)?.toUpperCase() || "U"}
-                        </AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </motion.div>
+                <DropdownMenuTrigger className="cursor-pointer inline-flex items-center justify-center rounded-full h-9 w-9 focus:outline-none hover:opacity-80 transition-opacity">
+                  <Avatar className="h-9 w-9 ring-2 ring-blue-100">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-700 text-sm font-semibold">
+                      {session.user?.name?.charAt(0)?.toUpperCase() || "U"}
+                    </AvatarFallback>
+                  </Avatar>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56 mt-2 border-0 shadow-xl shadow-gray-200/50" align="end">
                   <DropdownMenuLabel>
@@ -163,24 +167,28 @@ export function Navbar() {
                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    onClick={() => signOut({ callbackUrl: "/" })}
-                    className="text-red-600 cursor-pointer hover:bg-red-50"
+                    className="p-0"
                   >
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Sign Out
+                    <button
+                    onClick={() => signOut({ callbackUrl: "/login" })}
+                      className="flex w-full items-center px-2 py-1.5 text-red-600 cursor-pointer hover:bg-red-50 rounded-md"
+                    >
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </button>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
               <div className="flex items-center space-x-2">
-                <Link href="/auth/login">
+                <Link href="/login">
                   <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                     <Button variant="ghost" className="hover:bg-blue-50 hover:text-blue-600">
                       Sign In
                     </Button>
                   </motion.div>
                 </Link>
-                <Link href="/auth/register">
+                <Link href="/register">
                   <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                     <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-600/20">
                       Register
@@ -191,45 +199,43 @@ export function Navbar() {
             )}
 
             {/* Mobile menu button */}
-            {session && (
-              <motion.div whileTap={{ scale: 0.9 }}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="md:hidden hover:bg-gray-100"
-                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                >
-                  <AnimatePresence mode="wait">
-                    {mobileMenuOpen ? (
-                      <motion.div
-                        key="close"
-                        initial={{ rotate: -90, opacity: 0 }}
-                        animate={{ rotate: 0, opacity: 1 }}
-                        exit={{ rotate: 90, opacity: 0 }}
-                      >
-                        <X className="h-5 w-5" />
-                      </motion.div>
-                    ) : (
-                      <motion.div
-                        key="menu"
-                        initial={{ rotate: 90, opacity: 0 }}
-                        animate={{ rotate: 0, opacity: 1 }}
-                        exit={{ rotate: -90, opacity: 0 }}
-                      >
-                        <Menu className="h-5 w-5" />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </Button>
-              </motion.div>
-            )}
+            <motion.div whileTap={{ scale: 0.9 }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden hover:bg-gray-100"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              >
+                <AnimatePresence mode="wait">
+                  {mobileMenuOpen ? (
+                    <motion.div
+                      key="close"
+                      initial={{ rotate: -90, opacity: 0 }}
+                      animate={{ rotate: 0, opacity: 1 }}
+                      exit={{ rotate: 90, opacity: 0 }}
+                    >
+                      <X className="h-5 w-5" />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="menu"
+                      initial={{ rotate: 90, opacity: 0 }}
+                      animate={{ rotate: 0, opacity: 1 }}
+                      exit={{ rotate: -90, opacity: 0 }}
+                    >
+                      <Menu className="h-5 w-5" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </Button>
+            </motion.div>
           </div>
         </div>
       </div>
 
       {/* Animated Mobile Menu */}
       <AnimatePresence>
-        {mobileMenuOpen && session && (
+        {mobileMenuOpen && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -263,20 +269,22 @@ export function Navbar() {
                   </motion.div>
                 );
               })}
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: menuItems.length * 0.05 }}
-                className="border-t pt-2 mt-2"
-              >
-                <button
-                  onClick={() => signOut({ callbackUrl: "/" })}
-                  className="flex items-center w-full px-4 py-3 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+              {session && (
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: menuItems.length * 0.05 }}
+                  className="border-t pt-2 mt-2"
                 >
-                  <LogOut className="h-5 w-5 mr-3" />
-                  Sign Out
-                </button>
-              </motion.div>
+                  <button
+                    onClick={() => signOut({ callbackUrl: "/" })}
+                    className="flex items-center w-full px-4 py-3 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut className="h-5 w-5 mr-3" />
+                    Sign Out
+                  </button>
+                </motion.div>
+              )}
             </div>
           </motion.div>
         )}

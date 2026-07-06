@@ -8,29 +8,51 @@ export default auth((req) => {
   const role = session?.user?.role as string | undefined;
 
   // Public routes
-  const publicRoutes = ["/auth/login", "/auth/register", "/"];
-  if (publicRoutes.includes(pathname)) {
+  const publicRoutes = ["/login", "/register", "/", "/destinations", "/tours", "/contact", "/services"];
+  if (publicRoutes.includes(pathname) || pathname.startsWith("/images") || pathname.startsWith("/destinations")) {
     return NextResponse.next();
   }
 
-  // Protected routes
-  if (!isLoggedIn) {
-    const loginUrl = new URL("/auth/login", req.url);
-    loginUrl.searchParams.set("callbackUrl", pathname);
-    return NextResponse.redirect(loginUrl);
+  // Admin Login route
+  if (pathname === "/admin/login") {
+    if (isLoggedIn && role === "ADMIN") {
+      return NextResponse.redirect(new URL("/admin", req.url));
+    }
+    return NextResponse.next();
   }
 
-  // Role-based protection
-  if (pathname.startsWith("/admin") && role !== "ADMIN") {
-    return NextResponse.redirect(new URL("/", req.url));
+  // Admin routes protection
+  if (pathname.startsWith("/admin")) {
+    if (!isLoggedIn) {
+      const loginUrl = new URL("/admin/login", req.url);
+      loginUrl.searchParams.set("callbackUrl", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    if (role !== "ADMIN") {
+      return NextResponse.redirect(new URL("/", req.url)); // Customers trying to access admin
+    }
   }
 
-  if (pathname.startsWith("/driver") && role !== "DRIVER") {
-    return NextResponse.redirect(new URL("/", req.url));
+  // Customer routes protection (e.g. /dashboard)
+  if (pathname.startsWith("/dashboard") || pathname.startsWith("/customer")) {
+    if (!isLoggedIn) {
+      const loginUrl = new URL("/login", req.url);
+      loginUrl.searchParams.set("callbackUrl", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    if (role === "ADMIN") {
+      return NextResponse.redirect(new URL("/admin", req.url));
+    }
   }
 
-  if (pathname.startsWith("/customer") && role !== "CUSTOMER") {
-    return NextResponse.redirect(new URL("/", req.url));
+  // Driver routes protection
+  if (pathname.startsWith("/driver")) {
+    if (!isLoggedIn) {
+      return NextResponse.redirect(new URL("/login", req.url));
+    }
+    if (role !== "DRIVER") {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
   }
 
   return NextResponse.next();

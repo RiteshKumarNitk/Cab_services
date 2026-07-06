@@ -55,9 +55,9 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: #2563eb;
+  --primary: #b45309; /* Deep Amber for Rajasthan */
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
+  --secondary: #fef3c7; /* Warm sand */
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
@@ -75,20 +75,20 @@
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #2563eb;
+  --sidebar-primary: #b45309;
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: #2563eb;
 
-  --gradient-primary: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  --gradient-primary: linear-gradient(135deg, #b45309 0%, #ea580c 100%);
   --gradient-success: linear-gradient(135deg, #059669 0%, #10b981 100%);
   --gradient-warning: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
   --gradient-danger: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
   --gradient-info: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);
-  --gradient-hero: linear-gradient(135deg, #1e40af 0%, #7c3aed 50%, #db2777 100%);
-  --glass-bg: rgba(255, 255, 255, 0.15);
+  --gradient-hero: linear-gradient(135deg, #78350f 0%, #9a3412 50%, #b45309 100%);
+  --glass-bg: rgba(255, 255, 255, 0.85);
   --glass-border: rgba(255, 255, 255, 0.2);
 }
 

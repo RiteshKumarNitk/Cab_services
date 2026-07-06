@@ -16,6 +16,15 @@ enum Role {
 enum VehicleType {
   SEDAN
   SUV
+  HATCHBACK
+  TEMPO_TRAVELLER
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  BOOKED
+  MAINTENANCE
+  INACTIVE
 }
 
 enum BookingType {
@@ -26,9 +35,19 @@ enum BookingType {
   EVENT
 }
 
+enum TripType {
+  ONE_WAY
+  ROUND_TRIP
+  MULTI_CITY
+}
+
 enum BookingStatus {
-  REQUESTED
-  ACCEPTED
+  PENDING
+  PRICE_SENT
+  WAITING_CONFIRMATION
+  CONFIRMED
+  DRIVER_ASSIGNED
+  VEHICLE_READY
   STARTED
   COMPLETED
   CANCELLED
@@ -37,11 +56,13 @@ enum BookingStatus {
 enum PaymentMethod {
   CASH
   COMPANY
+  ONLINE
 }
 
 enum PaymentStatus {
   PENDING
   PAID
+  PARTIAL
 }
 
 model User {
@@ -93,64 +114,112 @@ model CabDriverProfile {
   zipCode          String?
   backgroundCheck  Boolean  @default(false)
   experienceYears  Int?
+  languagesSpoken  String?
+  emergencyContactName String?
+  emergencyContactPhone String?
+  driverPhoto      String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
 
 model Vehicle {
-  id          String      @id @default(uuid())
-  plateNumber String      @unique
-  model       String
-  color       String
-  capacity    Int
-  type        VehicleType
-  driverId    String?
-  driver      User?       @relation(fields: [driverId], references: [id])
-  isActive    Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  image       String?
+  id              String        @id @default(uuid())
+  plateNumber     String        @unique
+  model           String
+  color           String
+  seats           Int
+  luggage         Int           @default(2)
+  ac              Boolean       @default(true)
+  fuelType        String        @default("DIESEL") // PETROL, DIESEL, CNG, EV
+  transmission    String        @default("MANUAL") // MANUAL, AUTO
+  type            VehicleType
+  status          VehicleStatus @default(AVAILABLE)
+  
+  driverId        String?
+  driver          User?         @relation(fields: [driverId], references: [id])
+  
+  pricePerKm      Float         @default(11.0)
+  minKmPerDay     Float         @default(350.0)
+  nightCharge     Float         @default(200.0)
+  
+  insuranceExpiry DateTime?
+  fitnessExpiry   DateTime?
+  rcExpiry        DateTime?
+  permitExpiry    DateTime?
+  
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  image           String?
 
-  bookings    Booking[]
+  bookings        Booking[]
 
   @@index([type])
+  @@index([status])
   @@index([driverId])
 }
 
 model Booking {
-  id            String        @id @default(uuid())
-  customerId    String
-  customer      User          @relation("CustomerBookings", fields: [customerId], references: [id])
-  driverId      String?
-  driver        User?         @relation("DriverBookings", fields: [driverId], references: [id])
-  vehicleId     String?
-  vehicle       Vehicle?      @relation(fields: [vehicleId], references: [id])
+  id              String        @id @default(uuid())
+  customerId      String
+  customer        User          @relation("CustomerBookings", fields: [customerId], references: [id])
+  driverId        String?
+  driver          User?         @relation("DriverBookings", fields: [driverId], references: [id])
+  vehicleId       String?
+  vehicle         Vehicle?      @relation(fields: [vehicleId], references: [id])
 
-  bookingType   BookingType
-  pickupAddress String
-  dropAddress   String        @default("")
-  pickupLat     Float?
-  pickupLng     Float?
-  dropLat       Float?
-  dropLng       Float?
+  // Trip Request Details
+  bookingType     BookingType
+  tripType        TripType      @default(ONE_WAY)
+  pickupAddress   String
+  dropAddress     String        @default("")
+  pickupDate      DateTime      @default(now())
+  pickupTime      String        @default("10:00")
+  returnDate      DateTime?
+  returnTime      String?
+  passengers      Int           @default(1)
+  bags            Int           @default(0)
+  preferredCategory VehicleType @default(SEDAN)
+  specialInstructions String?
 
-  flightNumber  String?
+  pickupLat       Float?
+  pickupLng       Float?
+  dropLat         Float?
+  dropLng         Float?
+  flightNumber    String?
 
-  scheduledTime DateTime?
-  startTime     DateTime?
-  endTime       DateTime?
+  // Timestamps
+  scheduledTime   DateTime?
+  startTime       DateTime?
+  endTime         DateTime?
 
-  fare          Float
-  distance      Float?
-  duration      Int?
-  paymentMethod PaymentMethod @default(CASH)
-  paymentStatus PaymentStatus @default(PENDING)
+  // Quotation & Pricing Fields
+  billableKm      Float?
+  actualKm        Float?
+  baseFare        Float?
+  nightCharges    Float?
+  driverAllowance Float?
+  parkingCharges  Float?
+  tollCharges     Float?
+  stateTax        Float?
+  permitCharges   Float?
+  discount        Float?
+  gst             Float?
+  totalFare       Float?
 
-  status        BookingStatus @default(REQUESTED)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  // Legacy field kept for compatibility/simpleness if needed
+  fare            Float         @default(0)
+  distance        Float?
+  duration        Int?
 
-  rating        Rating?
-  cancellations Cancellation[]
+  paymentMethod   PaymentMethod @default(CASH)
+  paymentStatus   PaymentStatus @default(PENDING)
+
+  status          BookingStatus @default(PENDING)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  rating          Rating?
+  cancellations   Cancellation[]
 
   @@index([customerId])
   @@index([driverId])

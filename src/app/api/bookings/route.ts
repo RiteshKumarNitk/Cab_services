@@ -165,7 +165,7 @@ export async function POST(req: Request) {
         distance,
         duration,
         paymentMethod: paymentMethod || "CASH",
-        status: driverId ? "ACCEPTED" : "REQUESTED",
+        status: "PENDING",
       },
       include: {
         customer: { select: { id: true, name: true, phone: true } },

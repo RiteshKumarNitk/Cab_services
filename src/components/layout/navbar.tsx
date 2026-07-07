@@ -28,14 +28,33 @@ import {
   X,
   Phone,
   MapPin,
+  ChevronDown,
 } from "lucide-react";
 
-export function Navbar() {
+type NavItem = {
+  id: string;
+  label: string;
+  url: string;
+  target: string;
+  children?: NavItem[];
+};
+
+type MenuItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children?: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[] | undefined;
+};
+
+export function Navbar({ navigation, settings }: { navigation?: NavItem[]; settings?: Record<string, string> }) {
   const { data: session } = useSession();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const role = session?.user?.role;
+  const companyName = settings?.company_name || "Aradhana Travel";
+  const companyLogo = settings?.company_logo || "";
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -44,37 +63,42 @@ export function Navbar() {
   }, []);
 
   const getMenuItems = () => {
-    const commonItems = [
-      { href: "/", label: "Home", icon: LayoutDashboard },
-      { href: "/destinations", label: "Destinations", icon: MapPin },
-      { href: "/tours", label: "Tours", icon: Car },
-      { href: "/services", label: "Services", icon: Car },
-      { href: "/contact", label: "Contact", icon: Phone },
+    const dynamicItems: MenuItem[] = (navigation || []).map((item) => ({
+      href: item.url,
+      label: item.label,
+      icon: LayoutDashboard,
+      children: item.children?.map((c) => ({
+        href: c.url,
+        label: c.label,
+        icon: LayoutDashboard,
+      })),
+    }));
+
+    const adminItems: MenuItem[] = [
+      { href: "/admin", label: "Dashboard", icon: LayoutDashboard, children: undefined },
+      { href: "/admin/users", label: "Users", icon: Users, children: undefined },
+      { href: "/admin/vehicles", label: "Vehicles", icon: Car, children: undefined },
+      { href: "/admin/bookings", label: "Bookings", icon: CalendarCheck, children: undefined },
+      { href: "/admin/pricing", label: "Pricing", icon: CreditCard, children: undefined },
+      { href: "/admin/reports", label: "Reports", icon: BarChart3, children: undefined },
     ];
 
-    if (role === "ADMIN") {
-      return [
-        { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-        { href: "/admin/users", label: "Users", icon: Users },
-        { href: "/admin/vehicles", label: "Vehicles", icon: Car },
-        { href: "/admin/bookings", label: "Bookings", icon: CalendarCheck },
-        { href: "/admin/pricing", label: "Pricing", icon: CreditCard },
-        { href: "/admin/reports", label: "Reports", icon: BarChart3 },
-      ];
-    }
+    const defaultItems: MenuItem[] = [
+      { href: "/", label: "Home", icon: LayoutDashboard, children: undefined },
+      { href: "/destinations", label: "Destinations", icon: MapPin, children: undefined },
+      { href: "/tours", label: "Tours", icon: Car, children: undefined },
+      { href: "/services", label: "Services", icon: Car, children: undefined },
+      { href: "/contact", label: "Contact", icon: Phone, children: undefined },
+    ];
+
+    if (role === "ADMIN" || role === "SUPER_ADMIN") return adminItems;
     if (role === "DRIVER") {
-      return [
-        ...commonItems,
-        { href: "/driver", label: "Driver Dashboard", icon: LayoutDashboard },
-      ];
+      return [...dynamicItems, { href: "/driver", label: "Driver Dashboard", icon: LayoutDashboard, children: undefined }];
     }
     if (role === "CUSTOMER") {
-      return [
-        ...commonItems,
-        { href: "/customer", label: "My Trips", icon: CalendarCheck },
-      ];
+      return [...dynamicItems, { href: "/customer", label: "My Trips", icon: CalendarCheck, children: undefined }];
     }
-    return commonItems;
+    return dynamicItems.length > 0 ? dynamicItems : defaultItems;
   };
 
   const menuItems = getMenuItems();
@@ -91,21 +115,63 @@ export function Navbar() {
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             <Link href="/" className="flex items-center space-x-3 group">
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-600/20"
-              >
-                <span className="text-sm font-bold text-white">AT</span>
-              </motion.div>
+              {companyLogo ? (
+                <img src={companyLogo} alt={companyName} className="h-10 w-10 rounded-full object-cover" />
+              ) : (
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-600/20"
+                >
+                  <span className="text-sm font-bold text-white">
+                    {companyName.charAt(0).toUpperCase()}
+                  </span>
+                </motion.div>
+              )}
               <span className="font-semibold text-gray-900 hidden sm:block group-hover:text-blue-600 transition-colors">
-                Aradhana Travel
+                {companyName}
               </span>
             </Link>
             <div className="hidden md:flex ml-10 space-x-1">
               {menuItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
-                return (
+                const hasChildren = item.children && item.children.length > 0;
+                return hasChildren ? (
+                  <div
+                    key={item.href}
+                    className="relative"
+                    onMouseEnter={() => setOpenDropdown(item.href)}
+                    onMouseLeave={() => setOpenDropdown(null)}
+                  >
+                    <button
+                      className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        isActive
+                          ? "bg-blue-50 text-blue-700 shadow-sm"
+                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                      }`}
+                    >
+                      {item.label}
+                      <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                    </button>
+                    {openDropdown === item.href && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="absolute top-full left-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-gray-100 py-2 z-50"
+                      >
+                        {item.children?.map((child: any) => (
+                          <Link
+                            key={child.href}
+                            href={child.href}
+                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700"
+                          >
+                            {child.label}
+                          </Link>
+                        ))}
+                      </motion.div>
+                    )}
+                  </div>
+                ) : (
                   <Link key={item.href} href={item.href}>
                     <motion.div
                       whileHover={{ y: -1 }}
@@ -115,9 +181,6 @@ export function Navbar() {
                           : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                       }`}
                     >
-                      {item.label !== "Home" && item.label !== "Services" && item.label !== "Contact" && (
-                        <Icon className="h-4 w-4 mr-2" />
-                      )}
                       {item.label}
                       {isActive && (
                         <motion.div

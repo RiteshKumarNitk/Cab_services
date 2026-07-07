@@ -9,13 +9,31 @@ export default auth((req) => {
 
   // Public routes
   const publicRoutes = ["/login", "/register", "/", "/destinations", "/tours", "/contact", "/services"];
-  if (publicRoutes.includes(pathname) || pathname.startsWith("/images") || pathname.startsWith("/destinations")) {
+  if (
+    publicRoutes.includes(pathname) ||
+    pathname.startsWith("/images") ||
+    pathname.startsWith("/destinations") ||
+    pathname.startsWith("/blog") ||
+    pathname.startsWith("/faq") ||
+    pathname.startsWith("/gallery") ||
+    pathname.startsWith("/fleet") ||
+    pathname.startsWith("/pricing") ||
+    pathname.startsWith("/testimonials")
+  ) {
     return NextResponse.next();
   }
 
+  // Allow all static page catch-all routes (single segment slugs like /about, /privacy-policy)
+  const staticPageSlugs = ["/about", "/privacy-policy", "/terms", "/terms-and-conditions", "/refund-policy", "/cancellation-policy", "/careers", "/partners", "/corporate-booking", "/wedding-booking", "/pilgrimage-tours"];
+  if (staticPageSlugs.includes(pathname)) {
+    return NextResponse.next();
+  }
+
+  const adminRoles = ["SUPER_ADMIN", "ADMIN", "CONTENT_MANAGER", "BOOKING_MANAGER", "FLEET_MANAGER", "DRIVER_MANAGER", "SUPPORT_EXECUTIVE"];
+
   // Admin Login route
   if (pathname === "/admin/login") {
-    if (isLoggedIn && role === "ADMIN") {
+    if (isLoggedIn && adminRoles.includes(role!)) {
       return NextResponse.redirect(new URL("/admin", req.url));
     }
     return NextResponse.next();
@@ -28,7 +46,7 @@ export default auth((req) => {
       loginUrl.searchParams.set("callbackUrl", pathname);
       return NextResponse.redirect(loginUrl);
     }
-    if (role !== "ADMIN") {
+    if (!adminRoles.includes(role!)) {
       return NextResponse.redirect(new URL("/", req.url)); // Customers trying to access admin
     }
   }

@@ -1,311 +1,352 @@
-"use client";
-
-import { useSession } from "next-auth/react";
+import { getHomepageSections, getWebsiteSettings, getFeaturedFleetVehicles, getFeaturedTestimonials, getHomepageFAQs, getFeaturedPosts, getPublishedPages } from "@/lib/cms";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { Car, Star, Clock, MapPin, Shield, ArrowRight, Phone, CheckCircle2, Users, Luggage, Snowflake, Quote } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Car,
-  CalendarDays,
-  Star,
-  Clock,
-  MapPin,
-  Shield,
-  ArrowRight,
-  Phone,
-  CheckCircle2,
-  Map
-} from "lucide-react";
 import { TripRequestForm } from "@/components/TripRequestForm";
 
-const fadeInUp = {
-  initial: { opacity: 0, y: 40 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.6 } },
-};
+function parseContent(content: string): Record<string, any> {
+  try { return JSON.parse(content); } catch { return {}; }
+}
 
-const destinations = [
-  {
-    city: "Jaipur",
-    tagline: "The Pink City",
-    image: "/images/jaipur_card.png",
-    description: "Explore the majestic Amer Fort, Hawa Mahal, and vibrant bazaars.",
-  },
-  {
-    city: "Udaipur",
-    tagline: "City of Lakes",
-    image: "/images/udaipur_card.png",
-    description: "Experience the romance of Lake Pichola and the City Palace.",
-  },
-  {
-    city: "Jaisalmer",
-    tagline: "The Golden City",
-    image: "/images/jaisalmer_card.png",
-    description: "Camp in the sweeping sand dunes and visit the living golden fort.",
-  }
-];
-
-const tours = [
-  {
-    title: "Golden Triangle Tour",
-    duration: "4 Days / 3 Nights",
-    places: "Delhi - Agra - Jaipur",
-    price: "From ₹12,500",
-  },
-  {
-    title: "Rajasthan Heritage",
-    duration: "7 Days / 6 Nights",
-    places: "Jaipur - Jodhpur - Udaipur",
-    price: "From ₹22,000",
-  },
-  {
-    title: "Desert Safari Special",
-    duration: "5 Days / 4 Nights",
-    places: "Jodhpur - Jaisalmer - Bikaner",
-    price: "From ₹16,800",
-  }
-];
-
-export default function Home() {
-  const { data: session, status } = useSession();
-
-  if (status === "loading") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-orange-50">
-        <div className="animate-spin rounded-full h-16 w-16 border-4 border-orange-200 border-t-amber-600" />
-      </div>
-    );
-  }
-
+async function HeroSection({ section }: { section: any }) {
+  const s = parseContent(section.content);
   return (
-    <div className="min-h-screen overflow-hidden bg-orange-50/30">
-      {/* ===== HERO SECTION ===== */}
-      <section className="relative min-h-[90vh] flex items-center">
-        {/* Background Image */}
-        <div 
-          className="absolute inset-0 z-0"
-          style={{
-            backgroundImage: "url('/images/rajasthan_hero.png')",
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-          }}
-        >
-          <div className="absolute inset-0 bg-black/40" /> {/* Dark overlay for text readability */}
-        </div>
-
-        <div className="relative z-10 max-w-7xl mx-auto px-4 py-24 sm:px-6 lg:px-8 w-full">
-          <div className="grid lg:grid-cols-12 gap-12 items-center">
-            
-            {/* Left: Text Content */}
-            <motion.div
-              initial={{ opacity: 0, x: -50 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8 }}
-              className="lg:col-span-7"
-            >
-              <div className="inline-flex items-center gap-2 bg-black/30 backdrop-blur-md rounded-full px-4 py-2 mb-6 border border-white/20">
-                <span className="text-sm font-medium text-amber-300">★ Premier Rajasthan Tourism & Cab Rental</span>
-              </div>
-
-              <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold text-white mb-6 leading-tight drop-shadow-lg">
-                Discover the Royal 
-                <br />
-                <span className="text-amber-400">Heritage of Rajasthan</span>
-              </h1>
-
-              <p className="text-lg sm:text-xl text-gray-100 mb-8 max-w-lg drop-shadow-md font-medium">
-                Affordable Tour Packages & Premium Car Rentals with verified drivers. Your journey through the land of kings begins here.
-              </p>
-
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Link href="#destinations">
-                  <Button size="lg" className="bg-amber-600 hover:bg-amber-700 text-white text-lg px-8 py-6 h-auto rounded-xl shadow-xl">
-                    Explore Tours
+    <section className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-blue-900 text-white overflow-hidden">
+      {section.image && <img src={section.image} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />}
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-36">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          <div>
+            <h1 className="text-4xl md:text-6xl font-bold leading-tight mb-6">
+              {section.title || "Book Premium Cabs & Rajasthan Tours"}
+            </h1>
+            <p className="text-lg md:text-xl text-gray-200 mb-8 max-w-xl">
+              {section.subtitle || "Reliable, comfortable, and affordable cab service in Jaipur for local, outstation, and airport transfers."}
+            </p>
+            <div className="flex flex-wrap gap-4">
+              {section.ctaText && (
+                <Link href={section.ctaLink || "/contact"}>
+                  <Button size="lg" className="bg-amber-600 hover:bg-amber-700 text-white text-base px-8">
+                    {section.ctaText} <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
-                <div className="flex items-center gap-3 text-white font-medium bg-black/20 px-6 py-3 rounded-xl backdrop-blur-sm border border-white/10">
-                  <Phone className="h-5 w-5 text-amber-400" />
-                  +91 98765 43210
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Right: Trip Request Form Widget */}
-            <motion.div
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8, delay: 0.3 }}
-              className="lg:col-span-5 w-full max-w-lg ml-auto"
-            >
-              <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl p-2 border border-amber-100">
-                <TripRequestForm />
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* ===== TOP DESTINATIONS ===== */}
-      <section id="destinations" className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <span className="text-amber-600 font-bold tracking-wider uppercase text-sm">Top Rated</span>
-            <h2 className="text-4xl sm:text-5xl font-bold text-gray-900 mt-2 mb-4">
-              Explore Rajasthan
-            </h2>
-            <div className="w-24 h-1 bg-amber-500 mx-auto rounded-full" />
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {destinations.map((dest, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                whileHover={{ y: -10 }}
-                className="group cursor-pointer"
-              >
-                <div className="relative h-80 rounded-2xl overflow-hidden shadow-lg">
-                  <div 
-                    className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110"
-                    style={{ backgroundImage: `url('${dest.image}')` }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                  <div className="absolute bottom-0 left-0 right-0 p-6">
-                    <p className="text-amber-400 font-medium text-sm mb-1">{dest.tagline}</p>
-                    <h3 className="text-3xl font-bold text-white mb-2">{dest.city}</h3>
-                    <p className="text-gray-200 text-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-y-4 group-hover:translate-y-0">
-                      {dest.description}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== POPULAR TOURS ===== */}
-      <section className="py-24 bg-orange-50/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-end mb-12">
-            <div>
-              <span className="text-amber-600 font-bold tracking-wider uppercase text-sm">Best Sellers</span>
-              <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mt-2">
-                Popular Tour Packages
-              </h2>
+              )}
+              {section.ctaSecondaryText && (
+                <Link href={section.ctaSecondaryLink || "/fleet"}>
+                  <Button size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10 text-base px-8">
+                    {section.ctaSecondaryText}
+                  </Button>
+                </Link>
+              )}
             </div>
-            <Button variant="outline" className="hidden sm:flex border-amber-600 text-amber-700 hover:bg-amber-50">
-              View All Tours <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {tours.map((tour, i) => (
-              <Card key={i} className="border-0 shadow-md hover:shadow-xl transition-shadow bg-white overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="bg-amber-100 h-32 flex items-center justify-center">
-                    <Map className="h-12 w-12 text-amber-600 opacity-50" />
-                  </div>
-                  <div className="p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="text-xl font-bold text-gray-900">{tour.title}</h3>
-                        <p className="text-sm text-gray-500 flex items-center mt-1">
-                          <Clock className="h-3 w-3 mr-1" /> {tour.duration}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="bg-gray-50 p-3 rounded-lg mb-4 text-sm text-gray-700 font-medium border border-gray-100">
-                      {tour.places}
-                    </div>
-                    <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
-                      <span className="text-lg font-bold text-amber-700">{tour.price}</span>
-                      <Button size="sm" className="bg-gray-900 text-white hover:bg-gray-800">Details</Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          <div className="mt-8 text-center sm:hidden">
-            <Button variant="outline" className="border-amber-600 text-amber-700 w-full">
-              View All Tours
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* ===== WHY CHOOSE US ===== */}
-      <section className="py-20 bg-gray-900 text-white relative overflow-hidden">
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold mb-4">Why Book With Aradhana Travel?</h2>
-            <p className="text-gray-400 max-w-2xl mx-auto">We are proud to receive 5-star ratings and Certificate of Excellency Awards since 2015 from our guests.</p>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {[
-              { icon: Shield, title: "Verified Drivers", desc: "Professional, polite, and route-experienced." },
-              { icon: Star, title: "Premium Fleet", desc: "Clean, well-maintained AC vehicles." },
-              { icon: CheckCircle2, title: "Transparent Pricing", desc: "No hidden costs. Pay what you see." },
-              { icon: Phone, title: "24/7 Support", desc: "Dedicated travel manager for your trip." },
-            ].map((stat, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className="text-center"
-              >
-                <div className="h-16 w-16 bg-amber-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-500/30">
-                  <stat.icon className="h-8 w-8 text-amber-400" />
-                </div>
-                <h3 className="text-xl font-bold text-white mb-2">{stat.title}</h3>
-                <p className="text-gray-400 text-sm">{stat.desc}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== FOOTER ===== */}
-      <footer className="bg-gray-950 text-gray-400 py-12 border-t border-gray-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-3 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-10 w-10 rounded-full bg-amber-600 flex items-center justify-center">
-                  <span className="text-lg font-bold text-white">AT</span>
-                </div>
-                <span className="text-xl font-bold text-white">Aradhana Travel</span>
-              </div>
-              <p className="text-sm">Your trusted cab service & tour operator in Jaipur since 2015.</p>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-4">Quick Links</h4>
-              <div className="space-y-2 text-sm">
-                <Link href="/auth/login" className="block hover:text-amber-400 transition-colors">Sign In</Link>
-                <Link href="/auth/register" className="block hover:text-amber-400 transition-colors">Register</Link>
-                <Link href="/tours" className="block hover:text-amber-400 transition-colors">Rajasthan Tours</Link>
-              </div>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-4">Contact</h4>
-              <div className="space-y-2 text-sm">
-                <p>📞 +91 98765 43210</p>
-                <p>📍 G-3A, Rajputana Tower, Khatipura, Jaipur</p>
-                <p>✉️ info@aradhanatravel.com</p>
-              </div>
+            <div className="flex items-center gap-6 mt-8 text-sm text-gray-300">
+              <span className="flex items-center gap-1"><CheckCircle2 className="h-4 w-4 text-emerald-400" /> 100+ Vehicles</span>
+              <span className="flex items-center gap-1"><CheckCircle2 className="h-4 w-4 text-emerald-400" /> 5000+ Happy Customers</span>
+              <span className="flex items-center gap-1"><CheckCircle2 className="h-4 w-4 text-emerald-400" /> 24/7 Support</span>
             </div>
           </div>
-          <div className="border-t border-gray-900 pt-8 text-center text-sm">
-            <p>&copy; 2026 Aradhana Travel Service. All rights reserved.</p>
+          <div className="hidden lg:block">
+            <TripRequestForm />
           </div>
         </div>
-      </footer>
+      </div>
+    </section>
+  );
+}
+
+function StatsSection({ section }: { section: any }) {
+  const s = parseContent(section.content);
+  const stats = s.stats || [
+    { value: "5000+", label: "Happy Customers" },
+    { value: "100+", label: "Vehicles" },
+    { value: "50+", label: "Destinations" },
+    { value: "10+", label: "Years Experience" },
+  ];
+  return (
+    <section className="py-16 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {section.title && <h2 className="text-3xl font-bold text-center text-gray-900 mb-10">{section.title}</h2>}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          {stats.map((stat: any, i: number) => (
+            <div key={i} className="text-center">
+              <div className="text-3xl md:text-4xl font-bold text-amber-600 mb-1">{stat.value}</div>
+              <div className="text-gray-500 text-sm">{stat.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+async function WhyChooseUsSection({ section }: { section: any }) {
+  const s = parseContent(section.content);
+  const features = s.features || [
+    { icon: "Shield", title: "Safe & Reliable", desc: "GPS-tracked vehicles with experienced drivers" },
+    { icon: "Clock", title: "On-Time Pickup", desc: "Punctual service with real-time tracking" },
+    { icon: "Car", title: "Clean Vehicles", desc: "Well-maintained, sanitized fleet" },
+    { icon: "Star", title: "Best Rates", desc: "Transparent pricing with no hidden charges" },
+  ];
+  const iconMap: Record<string, any> = { Shield, Clock, Car, Star, MapPin, Phone, Users, CheckCircle2 };
+  return (
+    <section className="py-16 bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900">{section.title || "Why Choose Us"}</h2>
+          {section.subtitle && <p className="text-gray-500 mt-2 max-w-xl mx-auto">{section.subtitle}</p>}
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          {features.map((f: any, i: number) => {
+            const Icon = iconMap[f.icon] || Shield;
+            return (
+              <div key={i} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-center hover:shadow-md transition-shadow">
+                <div className="h-12 w-12 rounded-lg bg-amber-100 flex items-center justify-center mx-auto mb-4">
+                  <Icon className="h-6 w-6 text-amber-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-2">{f.title}</h3>
+                <p className="text-sm text-gray-500">{f.desc}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+async function ServicesSection({ section }: { section: any }) {
+  const s = parseContent(section.content);
+  const services = s.services || [
+    { title: "Local City Rides", desc: "Hourly & point-to-point city travel", icon: "Car" },
+    { title: "Outstation Trips", desc: "One-way & round trips to any city", icon: "MapPin" },
+    { title: "Airport Transfers", desc: "Pickup & drop from Jaipur Airport", icon: "Car" },
+    { title: "Rajasthan Tours", desc: "Customized tour packages across Rajasthan", icon: "MapPin" },
+    { title: "Tempo Traveller", desc: "Group travel with 12-18 seater vehicles", icon: "Users" },
+    { title: "Corporate Booking", desc: "Dedicated fleet for corporate clients", icon: "Shield" },
+  ];
+  const iconMap: Record<string, any> = { Car, MapPin, Users, Shield, Star, Clock };
+  return (
+    <section className="py-16 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900">{section.title || "Our Services"}</h2>
+          {section.subtitle && <p className="text-gray-500 mt-2">{section.subtitle}</p>}
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          {services.map((svc: any, i: number) => {
+            const Icon = iconMap[svc.icon] || Car;
+            return (
+              <div key={i} className="flex items-start gap-4 p-6 rounded-xl bg-gray-50 hover:bg-amber-50 transition-colors group cursor-pointer">
+                <div className="h-12 w-12 rounded-lg bg-amber-100 flex items-center justify-center shrink-0 group-hover:bg-amber-200 transition-colors">
+                  <Icon className="h-6 w-6 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-1">{svc.title}</h3>
+                  <p className="text-sm text-gray-500">{svc.desc}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+async function FleetSection({ section }: { section: any }) {
+  const vehicles = await getFeaturedFleetVehicles();
+  if (vehicles.length === 0) return null;
+  return (
+    <section className="py-16 bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900">{section.title || "Our Fleet"}</h2>
+          {section.subtitle && <p className="text-gray-500 mt-2">{section.subtitle}</p>}
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {vehicles.slice(0, 4).map((v) => (
+            <Link key={v.id} href={`/fleet/${v.slug}`} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow group">
+              <div className="h-32 bg-gray-100 rounded-lg mb-4 flex items-center justify-center overflow-hidden">
+                {v.images?.[0] ? (
+                  <img src={v.images[0]} alt={v.name} className="w-full h-full object-cover" />
+                ) : (
+                  <Car className="h-12 w-12 text-gray-300" />
+                )}
+              </div>
+              <h3 className="font-semibold text-gray-900 group-hover:text-amber-600 transition-colors">{v.name}</h3>
+              <div className="flex items-center gap-3 text-xs text-gray-500 mt-2">
+                <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {v.seats}</span>
+                <span className="flex items-center gap-1"><Luggage className="h-3 w-3" /> {v.luggage}</span>
+                {v.ac && <span className="flex items-center gap-1"><Snowflake className="h-3 w-3" /> AC</span>}
+              </div>
+              <div className="mt-3 text-amber-600 font-bold">₹{v.pricePerKm}/km</div>
+            </Link>
+          ))}
+        </div>
+        <div className="text-center mt-8">
+          <Link href="/fleet"><Button variant="outline">View All Fleet <ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+async function TestimonialsSection({ section }: { section: any }) {
+  const testimonials = await getFeaturedTestimonials();
+  if (testimonials.length === 0) return null;
+  return (
+    <section className="py-16 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900">{section.title || "What Our Customers Say"}</h2>
+          {section.subtitle && <p className="text-gray-500 mt-2">{section.subtitle}</p>}
+        </div>
+        <div className="grid md:grid-cols-3 gap-8">
+          {testimonials.slice(0, 3).map((t) => (
+            <div key={t.id} className="bg-gray-50 rounded-xl p-6">
+              <Quote className="h-8 w-8 text-amber-200 mb-3" />
+              <p className="text-gray-600 text-sm mb-4 line-clamp-3">&ldquo;{t.review}&rdquo;</p>
+              <div className="flex items-center gap-1 mb-3">
+                {Array.from({ length: t.rating }).map((_, i) => (<Star key={i} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />))}
+              </div>
+              <div className="font-semibold text-gray-900 text-sm">{t.customerName}</div>
+              {t.city && <div className="text-xs text-gray-500">{t.city}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+async function FAQSection({ section }: { section: any }) {
+  const faqs = await getHomepageFAQs();
+  if (faqs.length === 0) return null;
+  return (
+    <section className="py-16 bg-gray-50">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-10">
+          <h2 className="text-3xl font-bold text-gray-900">{section.title || "Frequently Asked Questions"}</h2>
+        </div>
+        <div className="space-y-3">
+          {faqs.slice(0, 5).map((faq) => (
+            <details key={faq.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden group">
+              <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
+                <span className="font-medium text-gray-900 text-sm pr-4">{faq.question}</span>
+                <span className="text-gray-400 group-open:rotate-180 transition-transform shrink-0">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                </span>
+              </summary>
+              <div className="px-4 pb-4 text-sm text-gray-600">{faq.answer}</div>
+            </details>
+          ))}
+        </div>
+        <div className="text-center mt-6">
+          <Link href="/faq" className="text-amber-600 text-sm font-medium hover:underline">View All FAQs</Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+async function BlogsSection({ section }: { section: any }) {
+  const posts = await getFeaturedPosts();
+  if (posts.length === 0) return null;
+  return (
+    <section className="py-16 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900">{section.title || "Latest from Our Blog"}</h2>
+        </div>
+        <div className="grid md:grid-cols-3 gap-8">
+          {posts.map((post) => (
+            <Link key={post.id} href={`/blog/${post.slug}`} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group">
+              <div className="h-40 bg-gray-100">
+                {post.featuredImage ? <img src={post.featuredImage} alt={post.title} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-300"><Car className="h-10 w-10" /></div>}
+              </div>
+              <div className="p-4">
+                <h3 className="font-semibold text-gray-900 group-hover:text-amber-600 transition-colors line-clamp-2">{post.title}</h3>
+                {post.shortDesc && <p className="text-sm text-gray-500 mt-1 line-clamp-2">{post.shortDesc}</p>}
+              </div>
+            </Link>
+          ))}
+        </div>
+        <div className="text-center mt-8">
+          <Link href="/blog"><Button variant="outline">View All Posts <ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CTASection({ section }: { section: any }) {
+  return (
+    <section className="py-16 bg-gradient-to-r from-amber-600 to-orange-600 text-white">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <h2 className="text-3xl font-bold mb-4">{section.title || "Ready to Book Your Ride?"}</h2>
+        <p className="text-amber-100 mb-8 text-lg">{section.subtitle || "Get in touch with us for instant booking and free quotes."}</p>
+        <div className="flex flex-wrap justify-center gap-4">
+          {section.ctaText && <Link href={section.ctaLink || "/contact"}><Button size="lg" className="bg-white text-amber-700 hover:bg-gray-100">{section.ctaText}</Button></Link>}
+          {section.ctaSecondaryText && <Link href={section.ctaSecondaryLink || `tel:${section.phone || "+919876543210"}`}><Button size="lg" variant="outline" className="border-white text-white hover:bg-white/10"><Phone className="mr-2 h-4 w-4" /> {section.ctaSecondaryText}</Button></Link>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ContactCTASection({ section }: { section: any }) {
+  return (
+    <section className="py-16 bg-gray-900 text-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <h2 className="text-3xl font-bold mb-4">{section.title || "Have Questions?"}</h2>
+        <p className="text-gray-400 mb-8 max-w-xl mx-auto">{section.subtitle || "Our team is available 24/7 to help you with bookings and inquiries."}</p>
+        <div className="flex flex-wrap justify-center gap-4">
+          {section.ctaText && <Link href={section.ctaLink || "/contact"}><Button size="lg" className="bg-amber-600 hover:bg-amber-700">{section.ctaText}</Button></Link>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+const SECTION_RENDERERS: Record<string, any> = {
+  hero: HeroSection,
+  stats: StatsSection,
+  why_choose_us: WhyChooseUsSection,
+  services: ServicesSection,
+  fleet: FleetSection,
+  testimonials: TestimonialsSection,
+  faq: FAQSection,
+  blogs: BlogsSection,
+  cta: CTASection,
+  footer_cta: ContactCTASection,
+};
+
+export default async function HomePage() {
+  const [sections, settings] = await Promise.all([
+    getHomepageSections(),
+    getWebsiteSettings(),
+  ]);
+
+  return (
+    <div className="min-h-screen">
+      {sections.length === 0 ? (
+        <>
+          <HeroSection section={{ title: "Book Premium Cabs & Rajasthan Tours", subtitle: "Reliable, comfortable, and affordable cab service in Jaipur", ctaText: "Book Now", ctaLink: "/contact", ctaSecondaryText: "View Fleet", ctaSecondaryLink: "/fleet" }} />
+          <StatsSection section={{}} />
+          <WhyChooseUsSection section={{}} />
+          <ServicesSection section={{}} />
+          <FleetSection section={{}} />
+          <TestimonialsSection section={{}} />
+          <FAQSection section={{}} />
+          <BlogsSection section={{}} />
+          <CTASection section={{}} />
+        </>
+      ) : (
+        sections.map((section) => {
+          const Renderer = SECTION_RENDERERS[section.type];
+          if (!Renderer) return null;
+          return <Renderer key={section.id} section={section} />;
+        })
+      )}
     </div>
   );
 }

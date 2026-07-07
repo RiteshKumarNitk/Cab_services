@@ -3,8 +3,9 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, MapPin } from "lucide-react";
 
-export default function CityGuidePage({ params }: { params: { city: string } }) {
-  const cityStr = params.city.toLowerCase();
+export default async function CityGuidePage({ params }: { params: Promise<{ city: string }> }) {
+  const { city } = await params;
+  const cityStr = city.toLowerCase();
   
   const cityData: Record<string, { title: string, hero: string, desc: string, places: string[] }> = {
     jaipur: {

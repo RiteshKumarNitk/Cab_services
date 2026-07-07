@@ -53,7 +53,7 @@ export async function POST(req: Request) {
         plateNumber,
         model,
         color,
-        capacity: parseInt(capacity),
+        seats: parseInt(capacity),
         type,
         driverId: driverId || null,
       },

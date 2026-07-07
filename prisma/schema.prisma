@@ -8,7 +8,13 @@ datasource db {
 }
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
+  CONTENT_MANAGER
+  BOOKING_MANAGER
+  FLEET_MANAGER
+  DRIVER_MANAGER
+  SUPPORT_EXECUTIVE
   DRIVER
   CUSTOMER
 }
@@ -18,6 +24,9 @@ enum VehicleType {
   SUV
   HATCHBACK
   TEMPO_TRAVELLER
+  LUXURY
+  BUS
+  MINI_BUS
 }
 
 enum VehicleStatus {
@@ -126,6 +135,8 @@ model Vehicle {
   id              String        @id @default(uuid())
   plateNumber     String        @unique
   model           String
+  name            String        @default("")
+  slug            String?       @unique
   color           String
   seats           Int
   luggage         Int           @default(2)
@@ -134,6 +145,15 @@ model Vehicle {
   transmission    String        @default("MANUAL") // MANUAL, AUTO
   type            VehicleType
   status          VehicleStatus @default(AVAILABLE)
+  
+  shortDescription String?
+  longDescription  String?
+  features        String[]      @default([])
+  images          String[]      @default([])
+  isFeatured      Boolean       @default(false)
+  displayOrder    Int           @default(0)
+  seoTitle        String?
+  seoDesc         String?
   
   driverId        String?
   driver          User?         @relation(fields: [driverId], references: [id])
@@ -156,6 +176,8 @@ model Vehicle {
   @@index([type])
   @@index([status])
   @@index([driverId])
+  @@index([slug])
+  @@index([displayOrder])
 }
 
 model Booking {
@@ -260,12 +282,288 @@ model Cancellation {
 model Pricing {
   id          String      @id @default(uuid())
   vehicleType VehicleType @unique
-  baseFare    Float
-  perKm       Float
-  perMinute   Float
-  eventMin    Float
-  eventMax    Float
-  monthlyMin  Float
-  monthlyMax  Float
+  baseFare    Float       @default(0)
+  perKm       Float       @default(0)
+  perMinute   Float       @default(0)
+  minKm       Float       @default(0)
+  nightCharge Float       @default(0)
+  driverCharge Float      @default(0)
+  waitingCharge Float     @default(0)
+  eventMin    Float       @default(0)
+  eventMax    Float       @default(0)
+  monthlyMin  Float       @default(0)
+  monthlyMax  Float       @default(0)
   updatedAt   DateTime    @updatedAt
+}
+
+model PricingPage {
+  id              String @id @default(uuid())
+  content         String @default("")
+  parkingPolicy   String @default("")
+  tollPolicy      String @default("")
+  stateTaxPolicy  String @default("")
+  cancellationPolicy String @default("")
+  refundPolicy    String @default("")
+  gstPercentage   Float  @default(5)
+  seasonalPricing String @default("")
+  specialOffers   String @default("")
+  updatedAt       DateTime @updatedAt
+}
+
+model FleetPage {
+  id      String @id @default(uuid())
+  content String @default("")
+  banner  String?
+}
+
+// ====== CMS MODELS ======
+
+model WebsiteSetting {
+  id    String @id @default(uuid())
+  key   String @unique
+  value String @default("")
+
+  @@index([key])
+}
+
+model Navigation {
+  id        String           @id @default(uuid())
+  name      String           @unique
+  slug      String           @unique
+  location  NavigationLocation @default(HEADER)
+  sortOrder Int              @default(0)
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  items NavigationItem[]
+
+  @@index([location])
+  @@index([sortOrder])
+}
+
+model NavigationItem {
+  id           String      @id @default(uuid())
+  navigationId String
+  navigation   Navigation  @relation(fields: [navigationId], references: [id], onDelete: Cascade)
+  parentId     String?
+  parent       NavigationItem? @relation("NavItemParent", fields: [parentId], references: [id])
+  children     NavigationItem[] @relation("NavItemParent")
+  label        String
+  url          String
+  icon         String?
+  target       String      @default("_self")
+  sortOrder    Int         @default(0)
+  isActive     Boolean     @default(true)
+  cssClass     String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([navigationId])
+  @@index([parentId])
+  @@index([sortOrder])
+}
+
+enum NavigationLocation {
+  HEADER
+  FOOTER
+  SIDEBAR
+}
+
+model StaticPage {
+  id            String   @id @default(uuid())
+  title         String
+  slug          String   @unique
+  bannerImage   String?
+  content       String   @default("")
+  metaTitle     String?
+  metaDesc      String?
+  metaKeywords  String?
+  ogImage       String?
+  status        PageStatus @default(DRAFT)
+  showInMenu    Boolean  @default(false)
+  showInFooter  Boolean  @default(false)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([slug])
+  @@index([status])
+  @@index([sortOrder])
+}
+
+enum PageStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model FAQCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  faqs FAQ[]
+}
+
+model FAQ {
+  id             String      @id @default(uuid())
+  question       String
+  answer         String
+  categoryId     String?
+  category       FAQCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  sortOrder      Int         @default(0)
+  status         String      @default("ACTIVE")
+  searchEnabled  Boolean     @default(true)
+  showOnHomepage Boolean     @default(false)
+  showOnFAQPage  Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([categoryId])
+  @@index([sortOrder])
+  @@index([status])
+}
+
+model Testimonial {
+  id          String   @id @default(uuid())
+  customerName String
+  photo       String?
+  city        String?
+  vehicleUsed String?
+  rating      Int      @default(5)
+  review      String
+  displayOrder Int     @default(0)
+  status      String   @default("ACTIVE")
+  featured    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([displayOrder])
+  @@index([status])
+  @@index([featured])
+}
+
+model GalleryItem {
+  id          String   @id @default(uuid())
+  title       String?
+  imageUrl    String
+  category    String   @default("general")
+  altText     String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([category])
+  @@index([sortOrder])
+}
+
+model BlogPost {
+  id             String   @id @default(uuid())
+  title          String
+  slug           String   @unique
+  category       String?
+  featuredImage  String?
+  gallery        String?
+  shortDesc      String   @default("")
+  content        String   @default("")
+  author         String?
+  publishedDate  DateTime?
+  metaTitle      String?
+  metaDesc       String?
+  metaKeywords   String?
+  status         String   @default("DRAFT")
+  featured       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([slug])
+  @@index([status])
+  @@index([featured])
+  @@index([publishedDate])
+}
+
+model ContactSubmission {
+  id          String   @id @default(uuid())
+  name        String
+  email       String
+  phone       String?
+  subject     String?
+  message     String
+  department  String?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model Permission {
+  id        String @id @default(uuid())
+  role      Role
+  module    String
+  canRead   Boolean @default(true)
+  canCreate Boolean @default(false)
+  canUpdate Boolean @default(false)
+  canDelete Boolean @default(false)
+
+  @@unique([role, module])
+  @@index([role])
+}
+
+model HomepageSection {
+  id        String   @id @default(uuid())
+  type      String   // hero, stats, services, routes, fleet, pricing, testimonials, gallery, faq, blogs, cta, footer_cta, trusted, why_choose_us
+  title     String   @default("")
+  subtitle  String   @default("")
+  content   String   @default("{}") // JSON blob for flexible content
+  image     String?
+  video     String?
+  ctaText   String?
+  ctaLink   String?
+  ctaSecondaryText String?
+  ctaSecondaryLink String?
+  sortOrder Int      @default(0)
+  isEnabled Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([sortOrder])
+  @@index([isEnabled])
+}
+
+model FormSubmission {
+  id        String   @id @default(uuid())
+  type      String   // contact, callback, trip_request, corporate, driver_registration, newsletter
+  name      String
+  email     String
+  phone     String?
+  subject   String?
+  message   String?
+  data      String   @default("{}") // JSON for extra fields
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([type])
+  @@index([isRead])
+}
+
+model EmailTemplate {
+  id      String @id @default(uuid())
+  key     String @unique
+  subject String @default("")
+  body    String @default("")
+  updatedAt DateTime @updatedAt
+}
+
+model DashboardWidget {
+  id        String @id @default(uuid())
+  userId    String
+  widgetKey String
+  enabled   Boolean @default(true)
+  position  Int     @default(0)
+
+  @@unique([userId, widgetKey])
 }

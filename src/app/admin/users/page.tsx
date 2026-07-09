@@ -64,7 +64,7 @@ export default function AdminUsersPage() {
   const [form, setForm] = useState<UserForm>(defaultForm);
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/login");
+    if (status === "unauthenticated") router.push("/admin/login");
     if (status === "authenticated" && session?.user?.role !== "ADMIN") {
       router.push("/");
     }

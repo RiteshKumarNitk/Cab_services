@@ -35,12 +35,12 @@ export default async function DynamicPage({ params }: { params: Promise<{ slug: 
           </div>
         )}
 
-        <Link href="/" className="text-amber-600 font-medium flex items-center mb-6 hover:underline">
+        <Link href="/" className="text-red-600 font-medium flex items-center mb-6 hover:underline">
           <ArrowLeft className="h-4 w-4 mr-2" /> Back to Home
         </Link>
 
         <div
-          className="prose prose-lg max-w-none prose-headings:text-gray-900 prose-a:text-amber-600"
+          className="prose prose-lg max-w-none prose-headings:text-gray-900 prose-a:text-red-600"
           dangerouslySetInnerHTML={{ __html: page.content }}
         />
       </div>

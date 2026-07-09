@@ -52,7 +52,7 @@ export default auth((req) => {
   }
 
   // Customer routes protection (e.g. /dashboard)
-  if (pathname.startsWith("/dashboard") || pathname.startsWith("/customer")) {
+  if (pathname.startsWith("/customer")) {
     if (!isLoggedIn) {
       const loginUrl = new URL("/login", req.url);
       loginUrl.searchParams.set("callbackUrl", pathname);

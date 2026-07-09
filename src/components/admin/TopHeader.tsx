@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
-import { Bell, Search, Moon, User, LogOut } from "lucide-react";
+import { Bell, Search, User, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -17,19 +17,16 @@ export function TopHeader() {
 
   return (
     <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-10">
-      <div className="flex items-center bg-gray-100 rounded-lg px-3 py-1.5 w-96">
+      <div className="flex items-center bg-gray-100 rounded-lg px-3 py-1.5 w-72 lg:w-96">
         <Search className="h-4 w-4 text-gray-500 mr-2" />
-        <input 
-          type="text" 
-          placeholder="Search bookings, customers, or vehicles..." 
+        <input
+          type="text"
+          placeholder="Search..."
           className="bg-transparent border-none focus:outline-none text-sm w-full"
         />
       </div>
 
-      <div className="flex items-center space-x-6">
-        <button className="text-gray-500 hover:text-gray-900 transition-colors">
-          <Moon className="h-5 w-5" />
-        </button>
+      <div className="flex items-center space-x-4">
         <button className="relative text-gray-500 hover:text-gray-900 transition-colors">
           <Bell className="h-5 w-5" />
           <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full">
@@ -40,7 +37,7 @@ export function TopHeader() {
         <DropdownMenu>
           <DropdownMenuTrigger className="focus:outline-none flex items-center space-x-2">
             <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-amber-600 text-white font-bold text-xs">
+              <AvatarFallback className="bg-red-600 text-white font-bold text-xs">
                 {session?.user?.name?.charAt(0) || "A"}
               </AvatarFallback>
             </Avatar>

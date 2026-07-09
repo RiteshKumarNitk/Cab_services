@@ -24,7 +24,7 @@ export default function CustomerProfilePage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/login");
+    if (status === "unauthenticated") router.push("/login");
     if (status === "authenticated" && session?.user?.role !== "CUSTOMER") {
       router.push("/");
     }
@@ -59,7 +59,7 @@ export default function CustomerProfilePage() {
   if (status === "loading") {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600" />
       </div>
     );
   }
@@ -70,7 +70,7 @@ export default function CustomerProfilePage() {
         <CardHeader>
           <div className="flex items-center gap-4">
             <Avatar className="h-16 w-16">
-              <AvatarFallback className="bg-blue-100 text-blue-700 text-xl">
+              <AvatarFallback className="bg-red-100 text-red-700 text-xl">
                 {session?.user?.name?.charAt(0)?.toUpperCase() || "U"}
               </AvatarFallback>
             </Avatar>

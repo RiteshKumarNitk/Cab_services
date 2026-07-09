@@ -44,7 +44,7 @@ export default function DriverRidesPage() {
   const updateStatus = useUpdateBookingStatus();
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/login");
+    if (status === "unauthenticated") router.push("/login");
     if (status === "authenticated" && session?.user?.role !== "DRIVER") {
       router.push("/");
     }

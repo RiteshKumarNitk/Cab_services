@@ -22,10 +22,9 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 via-white to-red-50">
           <div className="relative">
-            <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-100 border-t-blue-600" />
-            <div className="absolute inset-0 rounded-full animate-pulse bg-blue-600/5" />
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-red-100 border-t-red-600" />
           </div>
         </div>
       }
@@ -71,37 +70,14 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 relative overflow-hidden">
-      {/* Animated Background Orbs */}
-      <motion.div
-        animate={{
-          scale: [1, 1.2, 1],
-          rotate: [0, 180, 360],
-        }}
-        transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-        className="absolute top-20 left-20 w-64 h-64 bg-blue-200/30 rounded-full blur-3xl"
-      />
-      <motion.div
-        animate={{
-          scale: [1.2, 1, 1.2],
-          rotate: [360, 180, 0],
-        }}
-        transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-        className="absolute bottom-20 right-20 w-80 h-80 bg-purple-200/30 rounded-full blur-3xl"
-      />
-      <motion.div
-        animate={{ y: [0, -30, 0] }}
-        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute top-1/2 left-10 w-40 h-40 bg-indigo-200/20 rounded-full blur-3xl"
-      />
-
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-red-50 p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="relative z-10 w-full max-w-md"
       >
-        <Card className="border-0 shadow-2xl shadow-blue-200/50 backdrop-blur-xl bg-white/90">
+        <Card className="border-0 shadow-xl bg-white/95">
           <CardHeader className="text-center pb-2">
             <motion.div
               initial={{ scale: 0 }}
@@ -109,8 +85,8 @@ function LoginForm() {
               transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
               className="mx-auto mb-4"
             >
-              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-xl shadow-blue-600/30 animate-pulse-glow">
-                <Car className="h-10 w-10 text-white" />
+              <div className="h-16 w-16 rounded-full bg-red-600 flex items-center justify-center shadow-lg">
+                <Car className="h-8 w-8 text-white" />
               </div>
             </motion.div>
             <motion.div
@@ -118,7 +94,7 @@ function LoginForm() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
             >
-              <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              <CardTitle className="text-2xl font-bold text-gray-900">
                 Welcome Back
               </CardTitle>
               <CardDescription className="text-gray-500 mt-1">
@@ -154,7 +130,7 @@ function LoginForm() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="h-11 rounded-xl border-gray-200 focus:border-blue-400 focus:ring-blue-400 transition-all"
+                  className="h-11 rounded-xl border-gray-200 focus:border-red-400 focus:ring-red-400 transition-all"
                 />
               </motion.div>
               <motion.div
@@ -174,7 +150,7 @@ function LoginForm() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="h-11 rounded-xl border-gray-200 focus:border-blue-400 focus:ring-blue-400 transition-all pr-10"
+                    className="h-11 rounded-xl border-gray-200 focus:border-red-400 focus:ring-red-400 transition-all pr-10"
                   />
                   <button
                     type="button"
@@ -199,7 +175,7 @@ function LoginForm() {
               >
                 <Button
                   type="submit"
-                  className="w-full h-11 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-600/20 btn-shimmer"
+                  className="w-full h-11 rounded-xl bg-red-600 hover:bg-red-700 text-white shadow-sm"
                   disabled={loading}
                 >
                   {loading ? (
@@ -223,8 +199,8 @@ function LoginForm() {
               >
                 Don&apos;t have an account?{" "}
                 <Link
-                  href="/auth/register"
-                  className="text-blue-600 hover:text-blue-700 font-medium hover:underline transition-colors"
+                  href="/register"
+                  className="text-red-600 hover:text-red-700 font-medium hover:underline transition-colors"
                 >
                   Create one
                 </Link>

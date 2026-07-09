@@ -77,7 +77,7 @@ export default function AdminVehiclesPage() {
     : [];
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/login");
+    if (status === "unauthenticated") router.push("/admin/login");
     if (status === "authenticated" && session?.user?.role !== "ADMIN") {
       router.push("/");
     }
@@ -166,7 +166,7 @@ export default function AdminVehiclesPage() {
               Add Vehicle
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>
                 {editingVehicle ? "Edit Vehicle" : "Add Vehicle"}

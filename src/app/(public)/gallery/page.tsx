@@ -10,11 +10,11 @@ export default async function GalleryPage() {
   const categories = [...new Set(items.map((i) => i.category))];
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-gradient-to-br from-gray-900 to-gray-800 text-white py-20">
+    <div className="min-h-screen">
+      <div className="bg-gradient-to-br from-red-800 to-red-700 text-white py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">Gallery</h1>
-          <p className="text-xl text-gray-300">Moments from our journeys</p>
+          <p className="text-lg text-red-100">Moments from our journeys</p>
         </div>
       </div>
 
@@ -22,7 +22,7 @@ export default async function GalleryPage() {
         {categories.length > 1 && (
           <div className="flex flex-wrap gap-2 mb-8">
             {categories.map((cat) => (
-              <a key={cat} href={`#cat-${cat}`} className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-full text-sm font-medium hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700 transition-colors">
+              <a key={cat} href={`#cat-${cat}`} className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-full text-sm font-medium hover:bg-red-50 hover:border-red-200 hover:text-red-700 transition-colors">
                 {cat.charAt(0).toUpperCase() + cat.slice(1)}
               </a>
             ))}

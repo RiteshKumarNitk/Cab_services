@@ -48,7 +48,7 @@ export default function AdminBookingsPage() {
   const [detailOpen, setDetailOpen] = useState(false);
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/login");
+    if (status === "unauthenticated") router.push("/admin/login");
     if (status === "authenticated" && session?.user?.role !== "ADMIN") router.push("/");
   }, [session, status, router]);
 

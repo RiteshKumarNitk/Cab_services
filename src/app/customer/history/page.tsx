@@ -40,7 +40,7 @@ export default function CustomerHistoryPage() {
   const [ratingComment, setRatingComment] = useState("");
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/login");
+    if (status === "unauthenticated") router.push("/login");
     if (status === "authenticated" && session?.user?.role !== "CUSTOMER") {
       router.push("/");
     }

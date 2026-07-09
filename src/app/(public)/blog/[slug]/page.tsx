@@ -28,7 +28,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
       )}
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <Link href="/blog" className="text-amber-600 font-medium flex items-center mb-6 hover:underline">
+        <Link href="/blog" className="text-red-600 font-medium flex items-center mb-6 hover:underline">
           <ArrowLeft className="h-4 w-4 mr-2" /> Back to Blog
         </Link>
 
@@ -36,7 +36,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">{post.title}</h1>
         )}
 
-        <div className="flex items-center gap-4 text-sm text-gray-500 mb-8 pb-6 border-b border-gray-100">
+        <div className="flex items-center gap-4 text-sm text-gray-500 mb-8 pb-6 border-b border-gray-100 flex-wrap">
           {post.author && (
             <span className="flex items-center gap-1">
               <User className="h-4 w-4" /> {post.author}
@@ -53,7 +53,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             </span>
           )}
           {post.category && (
-            <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-xs font-medium">
+            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-medium">
               {post.category}
             </span>
           )}
@@ -64,7 +64,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         )}
 
         <div
-          className="prose prose-lg max-w-none prose-headings:text-gray-900 prose-a:text-amber-600"
+          className="prose prose-lg max-w-none prose-headings:text-gray-900 prose-a:text-red-600"
           dangerouslySetInnerHTML={{ __html: post.content }}
         />
       </div>

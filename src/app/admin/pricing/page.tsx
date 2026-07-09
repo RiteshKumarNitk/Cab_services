@@ -22,8 +22,6 @@ interface PricingForm extends Record<string, string> {
   perMinute: string;
   eventMin: string;
   eventMax: string;
-  monthlyMin: string;
-  monthlyMax: string;
 }
 
 export default function AdminPricingPage() {
@@ -36,7 +34,7 @@ export default function AdminPricingPage() {
   const [saving, setSaving] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/login");
+    if (status === "unauthenticated") router.push("/admin/login");
     if (status === "authenticated" && session?.user?.role !== "ADMIN") {
       router.push("/");
     }
@@ -52,8 +50,6 @@ export default function AdminPricingPage() {
           perMinute: String(p.perMinute),
           eventMin: String(p.eventMin),
           eventMax: String(p.eventMax),
-          monthlyMin: String(p.monthlyMin),
-          monthlyMax: String(p.monthlyMax),
         };
       }
       setForms(newForms);
@@ -101,8 +97,6 @@ export default function AdminPricingPage() {
             perMinute: "0",
             eventMin: "0",
             eventMax: "0",
-            monthlyMin: "0",
-            monthlyMax: "0",
           };
 
           return (
@@ -195,43 +189,6 @@ export default function AdminPricingPage() {
                           setForms({
                             ...forms,
                             [key]: { ...form, eventMax: e.target.value },
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Monthly Pricing */}
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                    Monthly Rentals
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Min (₹/month)</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={form.monthlyMin}
-                        onChange={(e) =>
-                          setForms({
-                            ...forms,
-                            [key]: { ...form, monthlyMin: e.target.value },
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Max (₹/month)</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={form.monthlyMax}
-                        onChange={(e) =>
-                          setForms({
-                            ...forms,
-                            [key]: { ...form, monthlyMax: e.target.value },
                           })
                         }
                       />

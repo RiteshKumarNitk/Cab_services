@@ -6,11 +6,11 @@ export default async function BlogListingPage() {
   const posts = await getPublishedPosts();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white py-20">
+    <div className="min-h-screen">
+      <div className="bg-gradient-to-br from-red-800 to-red-700 text-white py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">Our Blog</h1>
-          <p className="text-xl text-blue-100 max-w-2xl mx-auto">
+          <p className="text-lg text-red-100 max-w-2xl mx-auto">
             Travel tips, guides, and stories from Rajasthan
           </p>
         </div>
@@ -27,7 +27,7 @@ export default async function BlogListingPage() {
               <Link
                 key={post.id}
                 href={`/blog/${post.slug}`}
-                className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100"
+                className="group bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden border border-gray-100"
               >
                 {post.featuredImage ? (
                   <div className="h-48 overflow-hidden">
@@ -38,19 +38,19 @@ export default async function BlogListingPage() {
                     />
                   </div>
                 ) : (
-                  <div className="h-48 bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
-                    <span className="text-4xl font-bold text-blue-300">
+                  <div className="h-48 bg-gradient-to-br from-red-100 to-red-50 flex items-center justify-center">
+                    <span className="text-4xl font-bold text-red-300">
                       {post.title.charAt(0)}
                     </span>
                   </div>
                 )}
-                <div className="p-6">
+                <div className="p-5">
                   {post.category && (
-                    <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full">
+                    <span className="text-xs font-medium text-red-600 bg-red-50 px-2.5 py-1 rounded-full">
                       {post.category}
                     </span>
                   )}
-                  <h2 className="text-lg font-bold text-gray-900 mt-2 group-hover:text-blue-600 transition-colors line-clamp-2">
+                  <h2 className="text-lg font-bold text-gray-900 mt-2 group-hover:text-red-600 transition-colors line-clamp-2">
                     {post.title}
                   </h2>
                   {post.shortDesc && (
@@ -69,7 +69,7 @@ export default async function BlogListingPage() {
                       </span>
                     )}
                   </div>
-                  <div className="mt-4 flex items-center text-amber-600 text-sm font-medium group-hover:gap-2 transition-all">
+                  <div className="mt-4 flex items-center text-red-600 text-sm font-medium group-hover:gap-2 transition-all">
                     Read More <ArrowRight className="h-3.5 w-3.5 ml-1" />
                   </div>
                 </div>

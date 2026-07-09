@@ -23,7 +23,7 @@ export default function DriverEarningsPage() {
   const { data: bookings, isLoading } = useBookings();
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/login");
+    if (status === "unauthenticated") router.push("/login");
     if (status === "authenticated" && session?.user?.role !== "DRIVER") {
       router.push("/");
     }

@@ -1,4 +1,4 @@
-import { getPublishedFAQs, getWebsiteSettings, getHeaderNavigation } from "@/lib/cms";
+import { getPublishedFAQs, getWebsiteSettings } from "@/lib/cms";
 
 export default async function FAQPage() {
   const [faqs, settings] = await Promise.all([
@@ -15,11 +15,11 @@ export default async function FAQPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="bg-gradient-to-br from-gray-900 to-gray-800 text-white py-20">
+    <div className="min-h-screen">
+      <div className="bg-gradient-to-br from-red-800 to-red-700 text-white py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">Frequently Asked Questions</h1>
-          <p className="text-xl text-gray-300">Everything you need to know about our services</p>
+          <p className="text-lg text-red-100">Everything you need to know about our services</p>
         </div>
       </div>
 
@@ -27,7 +27,7 @@ export default async function FAQPage() {
         {Object.entries(grouped).map(([category, categoryFaqs]) => (
           <div key={category} className="mb-10">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">{category}</h2>
-            <div className="space-y-4">
+            <div className="space-y-3">
               {categoryFaqs.map((faq) => (
                 <details key={faq.id} className="group bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <summary className="flex items-center justify-between p-5 cursor-pointer hover:bg-gray-50 transition-colors [&::-webkit-details-marker]:hidden">

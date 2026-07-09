@@ -34,8 +34,12 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from "recharts";
-import { Download, BarChart3, TrendingUp } from "lucide-react";
+import { Download, BarChart3, TrendingUp, PieChart as PieChartIcon } from "lucide-react";
 
 export default function AdminReportsPage() {
   const { data: session, status } = useSession();
@@ -48,7 +52,7 @@ export default function AdminReportsPage() {
   });
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/login");
+    if (status === "unauthenticated") router.push("/admin/login");
     if (status === "authenticated" && session?.user?.role !== "ADMIN") {
       router.push("/");
     }
@@ -83,6 +87,20 @@ export default function AdminReportsPage() {
       revenue,
     })
   );
+
+  // Payment status breakdown
+  const paymentStats = filteredBookings.reduce(
+    (acc: Record<string, number>, b: { paymentStatus: string; fare: number }) => {
+      acc[b.paymentStatus] = (acc[b.paymentStatus] || 0) + 1;
+      return acc;
+    },
+    {}
+  );
+  const paymentChartData = Object.entries(paymentStats).map(([status, count]) => ({
+    name: status,
+    value: count,
+  }));
+  const PIE_COLORS = ["#22c55e", "#f59e0b", "#ef4444"];
 
   // Revenue by type
   const revenueByType = filteredBookings
@@ -162,7 +180,7 @@ export default function AdminReportsPage() {
   if (status === "loading") {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600" />
       </div>
     );
   }
@@ -267,7 +285,7 @@ export default function AdminReportsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-blue-600" />
+              <BarChart3 className="h-5 w-5 text-red-600" />
               Revenue by Service Type
             </CardTitle>
           </CardHeader>
@@ -279,8 +297,42 @@ export default function AdminReportsPage() {
                   <XAxis dataKey="type" />
                   <YAxis />
                   <Tooltip />
-                  <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="revenue" fill="#dc2626" radius={[4, 4, 0, 0]} />
                 </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <PieChartIcon className="h-5 w-5 text-red-600" />
+              Payment Status Breakdown
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={paymentChartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {paymentChartData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
               </ResponsiveContainer>
             </div>
           </CardContent>

@@ -8,17 +8,13 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   formatCurrency,
   formatDateTime,
   getBookingTypeName,
-  getStatusColor,
 } from "@/lib/utils";
-import { CalendarCheck, Car } from "lucide-react";
+import { CalendarCheck, Car, MapPin, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 export default function CustomerBookingsPage() {
@@ -27,7 +23,7 @@ export default function CustomerBookingsPage() {
   const { data: bookings, isLoading } = useBookings();
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/login");
+    if (status === "unauthenticated") router.push("/login");
     if (status === "authenticated" && session?.user?.role !== "CUSTOMER") {
       router.push("/");
     }
@@ -36,7 +32,7 @@ export default function CustomerBookingsPage() {
   if (status === "loading" || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600" />
       </div>
     );
   }
@@ -50,8 +46,8 @@ export default function CustomerBookingsPage() {
           <h1 className="text-2xl font-bold text-gray-900">My Bookings</h1>
           <p className="text-gray-500 mt-1">View all your ride bookings</p>
         </div>
-        <Link href="/customer">
-          <Button>
+        <Link href="/">
+          <Button className="bg-red-600 hover:bg-red-700 text-white">
             <Car className="h-4 w-4 mr-2" />
             Book New Ride
           </Button>
@@ -59,23 +55,13 @@ export default function CustomerBookingsPage() {
       </div>
 
       <div className="space-y-4">
-        {bookingsList.map(
-          (booking: {
-            id: string;
-            bookingType: string;
-            status: string;
-            fare: number;
-            pickupAddress: string;
-            dropAddress: string;
-            driver: { name: string } | null;
-            vehicle: { model: string; plateNumber: string } | null;
-            createdAt: string;
-          }) => (
-            <Card key={booking.id}>
+        {bookingsList.map((booking: any) => (
+          <Link key={booking.id} href={`/customer/bookings/${booking.id}`}>
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="font-semibold">
+                    <h3 className="font-semibold text-gray-900">
                       {getBookingTypeName(booking.bookingType)}
                     </h3>
                     <p className="text-sm text-gray-500">
@@ -83,49 +69,45 @@ export default function CustomerBookingsPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge className={getStatusColor(booking.status)}>
-                      {booking.status}
-                    </Badge>
-                    <span className="font-semibold">
+                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      booking.status === 'PENDING' ? 'bg-blue-100 text-blue-800' :
+                      booking.status === 'PRICE_SENT' ? 'bg-amber-100 text-amber-800' :
+                      booking.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-800' :
+                      booking.status === 'COMPLETED' ? 'bg-gray-100 text-gray-800' :
+                      booking.status === 'STARTED' ? 'bg-purple-100 text-purple-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {booking.status.replace(/_/g, " ")}
+                    </span>
+                    <span className="font-semibold text-gray-900">
                       {formatCurrency(booking.fare)}
                     </span>
                   </div>
                 </div>
 
                 <div className="text-sm text-gray-600 space-y-1">
-                  <p>
-                    <span className="font-medium">Pickup:</span>{" "}
-                    {booking.pickupAddress}
-                  </p>
-                  {booking.dropAddress && (
-                    <p>
-                      <span className="font-medium">Drop:</span>{" "}
-                      {booking.dropAddress}
-                    </p>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-3.5 w-3.5 text-gray-400" />
+                    <span>{booking.pickupAddress}</span>
+                    {booking.dropAddress && <><ArrowRight className="h-3 w-3 text-gray-300" /><span>{booking.dropAddress}</span></>}
+                  </div>
                   {booking.driver && (
-                    <p>
-                      <span className="font-medium">Driver:</span>{" "}
-                      {booking.driver.name}
-                    </p>
+                    <p className="ml-5"><span className="font-medium">Driver:</span> {booking.driver.name}</p>
                   )}
                   {booking.vehicle && (
-                    <p>
-                      <span className="font-medium">Vehicle:</span>{" "}
-                      {booking.vehicle.model} - {booking.vehicle.plateNumber}
-                    </p>
+                    <p className="ml-5"><span className="font-medium">Vehicle:</span> {booking.vehicle.model} - {booking.vehicle.plateNumber}</p>
                   )}
                 </div>
               </CardContent>
             </Card>
-          )
-        )}
+          </Link>
+        ))}
         {bookingsList.length === 0 && (
           <div className="text-center py-12 text-gray-500">
             <CalendarCheck className="h-12 w-12 mx-auto mb-4 text-gray-300" />
             <p>No bookings yet</p>
-            <Link href="/customer">
-              <Button className="mt-4">Book Your First Ride</Button>
+            <Link href="/">
+              <Button className="mt-4 bg-red-600 hover:bg-red-700 text-white">Book Your First Ride</Button>
             </Link>
           </div>
         )}

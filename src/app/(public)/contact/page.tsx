@@ -1,32 +1,37 @@
+import { Phone, Mail, MapPin } from "lucide-react";
+
 export default function ContactPage() {
   return (
-    <div className="max-w-4xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
-      <h1 className="text-4xl font-bold text-gray-900 mb-8 text-center">Contact Us</h1>
-      <div className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
-        <p className="text-lg text-gray-600 mb-6 text-center">
-          Have a question or need to book a special trip? Reach out to us anytime!
-        </p>
-        <div className="space-y-4">
-          <div className="flex items-center space-x-4">
-            <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">📍</div>
-            <div>
-              <h3 className="font-bold text-gray-900">Address</h3>
-              <p className="text-gray-600">123 Aradhana Travels, New Delhi, India</p>
+    <div className="min-h-screen">
+      <div className="bg-gradient-to-br from-red-800 to-red-700 text-white py-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h1 className="text-4xl md:text-5xl font-bold mb-4">Contact Us</h1>
+          <p className="text-lg text-red-100">We&apos;d love to hear from you</p>
+        </div>
+      </div>
+
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="grid sm:grid-cols-3 gap-6">
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-center hover:shadow-md transition-shadow">
+            <div className="h-14 w-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+              <Phone className="h-6 w-6 text-red-600" />
             </div>
+            <h3 className="font-semibold text-gray-900 mb-1">Phone / WhatsApp</h3>
+            <a href="tel:+917353019999" className="text-gray-500 hover:text-red-600 transition-colors">+91 73530 19999</a>
           </div>
-          <div className="flex items-center space-x-4">
-            <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-bold">📞</div>
-            <div>
-              <h3 className="font-bold text-gray-900">Phone / WhatsApp</h3>
-              <p className="text-gray-600">+91 98765 43210</p>
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-center hover:shadow-md transition-shadow">
+            <div className="h-14 w-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+              <Mail className="h-6 w-6 text-red-600" />
             </div>
+            <h3 className="font-semibold text-gray-900 mb-1">Email</h3>
+            <a href="mailto:riyaz.abbas@yahoo.com" className="text-gray-500 hover:text-red-600 transition-colors">riyaz.abbas@yahoo.com</a>
           </div>
-          <div className="flex items-center space-x-4">
-            <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">✉️</div>
-            <div>
-              <h3 className="font-bold text-gray-900">Email</h3>
-              <p className="text-gray-600">support@aradhanatravels.com</p>
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-center hover:shadow-md transition-shadow">
+            <div className="h-14 w-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+              <MapPin className="h-6 w-6 text-red-600" />
             </div>
+            <h3 className="font-semibold text-gray-900 mb-1">Address</h3>
+            <p className="text-gray-500 text-sm">Next to Ganesha Temple, Ananda Rao Circle, Bangalore - 560 009</p>
           </div>
         </div>
       </div>

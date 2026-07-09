@@ -111,7 +111,7 @@ export function PricingManager({
                         ].map((f) => (
                           <div key={f.key} className="space-y-1">
                             <Label className="text-xs">{f.label}</Label>
-                            <Input name={f.key} type="number" step="0.01" defaultValue={(entry as any)?.[f.key] ?? 0} />
+                            <Input name={f.key} type="number" step="0.01" defaultValue={entry?.[f.key as keyof PricingEntry] ?? 0} />
                           </div>
                         ))}
                       </div>
@@ -127,7 +127,7 @@ export function PricingManager({
                         ].map((f) => (
                           <div key={f.key} className="space-y-1">
                             <Label className="text-xs">{f.label}</Label>
-                            <Input name={f.key} type="number" step="0.01" defaultValue={(entry as any)?.[f.key] ?? 0} />
+                            <Input name={f.key} type="number" step="0.01" defaultValue={entry?.[f.key as keyof PricingEntry] ?? 0} />
                           </div>
                         ))}
                       </div>
@@ -144,7 +144,7 @@ export function PricingManager({
                         ].map((f) => (
                           <div key={f.key} className="space-y-1">
                             <Label className="text-xs">{f.label}</Label>
-                            <Input name={f.key} type="number" step="0.01" defaultValue={(entry as any)?.[f.key] ?? 0} />
+                            <Input name={f.key} type="number" step="0.01" defaultValue={entry?.[f.key as keyof PricingEntry] ?? 0} />
                           </div>
                         ))}
                       </div>

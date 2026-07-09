@@ -70,13 +70,27 @@ export type NavigationWithItems = {
   items: NavItemWithChildren[];
 };
 
-function buildNavTree(items: any[]): NavItemWithChildren[] {
-  const itemMap = new Map<string, any>();
-  const roots: any[] = [];
+interface NavItemNode {
+  id: string;
+  label: string;
+  url: string;
+  icon: string | null;
+  target: string;
+  sortOrder: number;
+  isActive: boolean;
+  cssClass: string | null;
+  parentId: string | null;
+  children: NavItemNode[];
+}
+
+function buildNavTree(items: Omit<NavItemNode, "children">[]): NavItemNode[] {
+  const itemMap = new Map<string, NavItemNode>();
 
   for (const item of items) {
     itemMap.set(item.id, { ...item, children: [] });
   }
+
+  const roots: NavItemNode[] = [];
 
   for (const item of items) {
     const node = itemMap.get(item.id)!;
@@ -87,9 +101,9 @@ function buildNavTree(items: any[]): NavItemWithChildren[] {
     }
   }
 
-  const sort = (arr: any[]) =>
+  const sort = (arr: NavItemNode[]) =>
     arr.sort((a, b) => a.sortOrder - b.sortOrder);
-  const sortRecursive = (arr: any[]) => {
+  const sortRecursive = (arr: NavItemNode[]) => {
     sort(arr);
     for (const node of arr) {
       if (node.children.length) sortRecursive(node.children);
@@ -214,7 +228,7 @@ export async function getFeaturedTestimonials() {
 export async function getGalleryItems(category?: string) {
   return unstable_cache(
     async () => {
-      const where: any = { isActive: true };
+      const where: Record<string, unknown> = { isActive: true };
       if (category) where.category = category;
       return prisma.galleryItem.findMany({
         where,
@@ -334,7 +348,7 @@ export async function getHomepageSectionByType(type: string) {
 // ====== FORM SUBMISSIONS ======
 
 export async function getFormSubmissions(type?: string) {
-  const where: any = {};
+  const where: Record<string, unknown> = {};
   if (type) where.type = type;
   return prisma.formSubmission.findMany({
     where,

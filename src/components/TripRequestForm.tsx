@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import Link from "next/link";
 import { MapPin, Calendar, ArrowRight, Search } from "lucide-react";
 
 export function TripRequestForm() {
@@ -26,9 +27,9 @@ export function TripRequestForm() {
     <div className="w-full bg-white/95 backdrop-blur-md rounded-xl shadow-2xl overflow-hidden">
       <div className="bg-red-700 px-6 py-3 flex items-center justify-between">
         <h3 className="text-white font-semibold text-lg">Book Your Cab Now</h3>
-        <a href="/routes" className="text-red-200 text-xs hover:text-white transition-colors flex items-center gap-1">
+        <Link href="/routes" className="text-red-200 text-xs hover:text-white transition-colors flex items-center gap-1">
           View Routes <ArrowRight className="h-3 w-3" />
-        </a>
+        </Link>
       </div>
 
       <div className="p-5">

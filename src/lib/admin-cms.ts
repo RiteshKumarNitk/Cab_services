@@ -3,6 +3,7 @@
 import { updateTag } from "next/cache";
 import { prisma } from "./prisma";
 import { auth } from "./auth";
+import type { NavigationLocation, VehicleType, Prisma } from "@prisma/client";
 
 // ====== SETTINGS ======
 
@@ -60,7 +61,7 @@ export async function createNavigation(formData: FormData) {
   const location = formData.get("location") as string;
 
   await prisma.navigation.create({
-    data: { name, slug, location: location as any },
+    data: { name, slug, location: location as NavigationLocation },
   });
 
   updateTag("navigation");
@@ -73,7 +74,7 @@ export async function updateNavigation(id: string, formData: FormData) {
     throw new Error("Unauthorized");
   }
 
-  const data: any = {};
+  const data: Record<string, unknown> = {};
   const name = formData.get("name");
   if (name) data.name = name;
   const slug = formData.get("slug");
@@ -131,7 +132,7 @@ export async function updateNavItem(id: string, formData: FormData) {
     throw new Error("Unauthorized");
   }
 
-  const data: any = {};
+  const data: Record<string, unknown> = {};
   const label = formData.get("label");
   if (label) data.label = label;
   const url = formData.get("url");
@@ -185,7 +186,7 @@ export async function updateStaticPage(id: string, formData: FormData) {
     throw new Error("Unauthorized");
   }
 
-  const data: any = {};
+  const data: Record<string, unknown> = {};
   for (const [key, value] of formData.entries()) {
     if (key === "sortOrder" || key === "showInMenu" || key === "showInFooter") {
       data[key] = value === "true" || value === "on";
@@ -232,7 +233,7 @@ export async function updateFAQ(id: string, formData: FormData) {
     throw new Error("Unauthorized");
   }
 
-  const data: any = {};
+  const data: Record<string, unknown> = {};
   for (const [key, value] of formData.entries()) {
     if (["searchEnabled", "showOnHomepage", "showOnFAQPage"].includes(key)) {
       data[key] = value === "true" || value === "on";
@@ -288,7 +289,7 @@ export async function updateTestimonial(id: string, formData: FormData) {
     throw new Error("Unauthorized");
   }
 
-  const data: any = {};
+  const data: Record<string, unknown> = {};
   for (const [key, value] of formData.entries()) {
     if (["rating", "displayOrder", "sortOrder"].includes(key)) {
       data[key] = parseInt(value as string);
@@ -366,7 +367,7 @@ export async function updateBlogPost(id: string, formData: FormData) {
     throw new Error("Unauthorized");
   }
 
-  const data: any = {};
+  const data: Record<string, unknown> = {};
   for (const [key, value] of formData.entries()) {
     if (["featured"].includes(key)) {
       data[key] = value === "true" || value === "on";
@@ -427,7 +428,7 @@ export async function saveVehicle(id: string | null, formData: FormData) {
     throw new Error("Unauthorized");
   }
 
-  const data: any = {
+  const data: Record<string, unknown> = {
     name: formData.get("name") as string,
     slug: formData.get("slug") as string,
     model: formData.get("model") as string,
@@ -459,7 +460,7 @@ export async function saveVehicle(id: string | null, formData: FormData) {
   } else {
     // Generate a plate number if not provided
     const plateNumber = (formData.get("plateNumber") as string) || `CMS-${Date.now()}`;
-    await prisma.vehicle.create({ data: { ...data, plateNumber } });
+    await prisma.vehicle.create({ data: { ...data, plateNumber } as Prisma.VehicleCreateInput });
   }
 
   updateTag("fleet");
@@ -485,7 +486,7 @@ export async function savePricing(vehicleType: string, formData: FormData) {
     throw new Error("Unauthorized");
   }
 
-  const data: any = {};
+  const data: Record<string, unknown> = {};
   for (const [key, value] of formData.entries()) {
     if (typeof value === "string" && value) {
       data[key] = isNaN(Number(value)) ? value : parseFloat(value);
@@ -493,9 +494,9 @@ export async function savePricing(vehicleType: string, formData: FormData) {
   }
 
   await prisma.pricing.upsert({
-    where: { vehicleType: vehicleType as any },
+    where: { vehicleType: vehicleType as VehicleType },
     update: data,
-    create: { vehicleType: vehicleType as any, ...data },
+    create: { vehicleType: vehicleType as VehicleType, ...data },
   });
 
   updateTag("pricing");
@@ -509,7 +510,7 @@ export async function savePricingPage(formData: FormData) {
   }
 
   const entries = Array.from(formData.entries());
-  const data: any = {};
+  const data: Record<string, unknown> = {};
   for (const [key, value] of entries) {
     if (key === "gstPercentage") {
       data[key] = parseFloat(value as string) || 0;
@@ -550,7 +551,7 @@ export async function saveHomepageSection(id: string | null, formData: FormData)
     throw new Error("Unauthorized");
   }
 
-  const data: any = {
+  const data: Record<string, unknown> = {
     type: formData.get("type") as string,
     title: (formData.get("title") as string) || "",
     subtitle: (formData.get("subtitle") as string) || "",
@@ -566,9 +567,9 @@ export async function saveHomepageSection(id: string | null, formData: FormData)
   };
 
   if (id) {
-    await prisma.homepageSection.update({ where: { id }, data });
+    await prisma.homepageSection.update({ where: { id }, data: data as Prisma.HomepageSectionUpdateInput });
   } else {
-    await prisma.homepageSection.create({ data });
+    await prisma.homepageSection.create({ data: data as Prisma.HomepageSectionCreateInput });
   }
 
   updateTag("homepage");

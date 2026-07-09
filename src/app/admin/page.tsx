@@ -179,7 +179,7 @@ export default async function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {allBookings.slice(0, 5).map((booking: any) => (
+                    {allBookings.slice(0, 5).map((booking: typeof allBookings[number]) => (
                       <tr key={booking.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                         <td className="py-3 px-4">
                           <div className="font-medium text-gray-900">{booking.customer?.name || "Guest"}</div>

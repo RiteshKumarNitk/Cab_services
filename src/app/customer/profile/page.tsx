@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,18 +19,23 @@ import { toast } from "sonner";
 export default function CustomerProfilePage() {
   const { data: session, status, update } = useSession();
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [name, setName] = useState(session?.user?.name || "");
+  const [phone, setPhone] = useState(session?.user?.phone || "");
   const [saving, setSaving] = useState(false);
+  const initialized = useRef(false);
+
+  useEffect(() => {
+    if (!initialized.current && session?.user) {
+      setName(session.user.name || "");
+      setPhone(session.user.phone || "");
+      initialized.current = true;
+    }
+  }, [session]);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
     if (status === "authenticated" && session?.user?.role !== "CUSTOMER") {
       router.push("/");
-    }
-    if (session?.user) {
-      setName(session.user.name || "");
-      setPhone(session.user.phone || "");
     }
   }, [session, status, router]);
 

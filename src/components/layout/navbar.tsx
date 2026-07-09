@@ -4,7 +4,7 @@ import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -149,7 +149,7 @@ export function Navbar({ navigation, settings }: { navigation?: NavItem[]; setti
                           animate={{ opacity: 1, y: 0 }}
                           className="absolute top-full left-0 mt-1 w-52 bg-white rounded-lg shadow-xl border border-gray-100 py-1.5 z-50"
                         >
-                          {item.children?.map((child: any) => (
+{item.children?.map((child: { href: string; label: string }) => (
                             <Link
                               key={child.href}
                               href={child.href}
@@ -323,16 +323,16 @@ export function Navbar({ navigation, settings }: { navigation?: NavItem[]; setti
                         <div className="flex items-center px-4 py-2.5 text-sm font-medium text-gray-700">
                           {item.label}
                         </div>
-                        {item.children?.map((child: any) => (
-                          <Link
-                            key={child.href}
-                            href={child.href}
-                            onClick={() => setMobileMenuOpen(false)}
-                            className="flex items-center px-8 py-2 text-sm text-gray-600 hover:bg-red-50 hover:text-red-700 rounded-lg"
-                          >
-                            {child.label}
-                          </Link>
-                        ))}
+{item.children?.map((child: { href: string; label: string }) => (
+              <Link
+                key={child.href}
+                href={child.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center px-8 py-2 text-sm text-gray-600 hover:bg-red-50 hover:text-red-700 rounded-lg"
+              >
+                {child.label}
+              </Link>
+            ))}
                       </div>
                     );
                   }

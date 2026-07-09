@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useAdminPricing, useUpdatePricing } from "@/lib/hooks";
@@ -32,6 +32,7 @@ export default function AdminPricingPage() {
 
   const [forms, setForms] = useState<Record<string, PricingForm>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const formsInitialized = useRef(false);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/admin/login");
@@ -41,7 +42,7 @@ export default function AdminPricingPage() {
   }, [session, status, router]);
 
   useEffect(() => {
-    if (Array.isArray(pricing)) {
+    if (Array.isArray(pricing) && !formsInitialized.current) {
       const newForms: Record<string, PricingForm> = {};
       for (const p of pricing) {
         newForms[p.vehicleType] = {
@@ -53,6 +54,7 @@ export default function AdminPricingPage() {
         };
       }
       setForms(newForms);
+      formsInitialized.current = true;
     }
   }, [pricing]);
 

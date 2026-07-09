@@ -179,7 +179,7 @@ export default function CustomerHistoryPage() {
                         </div>
                         {booking.rating.comment && (
                           <p className="text-xs text-gray-500 mt-1">
-                            "{booking.rating.comment}"
+                            &ldquo;{booking.rating.comment}&rdquo;
                           </p>
                         )}
                       </div>

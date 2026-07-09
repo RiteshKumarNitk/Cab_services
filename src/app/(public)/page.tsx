@@ -1,29 +1,42 @@
 import { getHomepageSections, getWebsiteSettings, getFeaturedFleetVehicles, getFeaturedTestimonials, getHomepageFAQs, getFeaturedPosts } from "@/lib/cms";
 import Link from "next/link";
-import { Car, Star, Clock, MapPin, Shield, ArrowRight, Phone, CheckCircle2, Users, Luggage, Snowflake, Quote, Wifi, Music, Wind, Battery, Target, Heart, ShieldCheck, HeadphonesIcon, Bus } from "lucide-react";
+import { Car, Star, Clock, MapPin, Shield, ArrowRight, Phone, CheckCircle2, Users, Luggage, Snowflake, Quote, Wifi, Music, Wind, Battery, Target, Heart, ShieldCheck, HeadphonesIcon, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TripRequestForm } from "@/components/TripRequestForm";
 import { HomeHero } from "./_components/home-hero";
 
-function parseContent(content: string): Record<string, any> {
-  try { return JSON.parse(content); } catch { return {}; }
+type SectionData = Record<string, unknown> & {
+  id?: string;
+  type?: string;
+  title?: string;
+  subtitle?: string;
+  content?: string;
+  image?: string | null;
+  ctaText?: string | null;
+  ctaLink?: string | null;
+  ctaSecondaryText?: string | null;
+  ctaSecondaryLink?: string | null;
+};
+
+function parseContent(content: string) {
+  try { return JSON.parse(content) as Record<string, unknown>; } catch { return {} as Record<string, unknown>; }
 }
 
 const HeroSection = HomeHero;
 
-function StatsSection({ section }: { section: any }) {
-  const s = parseContent(section.content);
-  const stats = s.stats || [
+function StatsSection({ section }: { section: SectionData }) {
+  const s = parseContent(section.content ?? "{}");
+  const stats = (s.stats as Array<{ value: string; label: string; icon: string }> | undefined) || [
     { value: "30+", label: "Connecting Destinations", icon: "MapPin" },
     { value: "100%", label: "Comfort and Safety", icon: "Shield" },
     { value: "5000+", label: "Happy Customers", icon: "Users" },
   ];
-  const iconMap: Record<string, any> = { MapPin: MapPin, Shield: Shield, Users: Users, Star: Star, Target: Target };
+  const iconMap: Record<string, LucideIcon> = { MapPin: MapPin, Shield: Shield, Users: Users, Star: Star, Target: Target };
   return (
     <section className="py-12 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          {stats.map((stat: any, i: number) => {
+          {stats.map((stat, i: number) => {
             const Icon = iconMap[stat.icon] || MapPin;
             return (
               <div key={i} className="bg-white rounded-xl p-6 flex items-center gap-4 shadow-sm border border-gray-100">
@@ -43,15 +56,15 @@ function StatsSection({ section }: { section: any }) {
   );
 }
 
-function ServicesSection({ section }: { section: any }) {
-  const s = parseContent(section.content);
-  const services = s.services || [
+function ServicesSection({ section }: { section: SectionData }) {
+  const s = parseContent(section.content ?? "{}");
+  const services = (s.services as Array<{ title: string; desc: string; icon: string }> | undefined) || [
     { title: "Instant Booking", desc: "Enjoy a smooth and hassle-free cab reservation experience with transparent pricing and no hidden fees.", icon: "Clock" },
     { title: "Affordable Fares", desc: "Competitive rates with leading cab operators to bring you great savings and unbeatable travel value.", icon: "Target" },
     { title: "Live Tracking", desc: "Monitor your trip in real-time with instant route details, accurate arrival updates, and seamless information.", icon: "MapPin" },
     { title: "More Booking Options", desc: "Multiple convenient and reliable ways to book your cab quickly, securely, and without any hassle.", icon: "Shield" },
   ];
-  const iconMap: Record<string, any> = { Clock: Clock, Target: Target, MapPin: MapPin, Shield: Shield, Car: Car };
+  const iconMap: Record<string, LucideIcon> = { Clock: Clock, Target: Target, MapPin: MapPin, Shield: Shield, Car: Car };
   return (
     <section className="py-16 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -65,7 +78,7 @@ function ServicesSection({ section }: { section: any }) {
           )}
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {services.map((svc: any, i: number) => {
+          {services.map((svc, i: number) => {
             const Icon = iconMap[svc.icon] || Car;
             return (
               <div key={i} className="text-center p-6 rounded-xl bg-gray-50 hover:bg-red-50 transition-colors group cursor-pointer">
@@ -83,9 +96,9 @@ function ServicesSection({ section }: { section: any }) {
   );
 }
 
-function AmenitiesSection({ section }: { section: any }) {
-  const s = parseContent(section.content);
-  const amenities = s.amenities || [
+function AmenitiesSection({ section }: { section: SectionData }) {
+  const s = parseContent(section.content ?? "{}");
+  const amenities = (s.amenities as Array<{ title: string; icon: string }> | undefined) || [
     { title: "Water Bottle", icon: "Wind" },
     { title: "Phone Charging", icon: "Battery" },
     { title: "Air Conditioner", icon: "Snowflake" },
@@ -93,7 +106,7 @@ function AmenitiesSection({ section }: { section: any }) {
     { title: "WiFi Hotspot", icon: "Wifi" },
     { title: "GPS Tracking", icon: "MapPin" },
   ];
-  const iconMap: Record<string, any> = { Wind: Wind, Battery: Battery, Snowflake: Snowflake, Music: Music, Wifi: Wifi, MapPin: MapPin, Car: Car };
+  const iconMap: Record<string, LucideIcon> = { Wind: Wind, Battery: Battery, Snowflake: Snowflake, Music: Music, Wifi: Wifi, MapPin: MapPin, Car: Car };
   return (
     <section className="py-16 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -102,7 +115,7 @@ function AmenitiesSection({ section }: { section: any }) {
           {section.subtitle && <p className="text-gray-500 mt-2">{section.subtitle}</p>}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-          {amenities.map((a: any, i: number) => {
+          {amenities.map((a, i: number) => {
             const Icon = iconMap[a.icon] || Car;
             return (
               <div key={i} className="bg-white rounded-xl p-5 text-center shadow-sm border border-gray-100 hover:shadow-md transition-shadow group">
@@ -119,7 +132,7 @@ function AmenitiesSection({ section }: { section: any }) {
   );
 }
 
-function AboutSection({ section }: { section: any }) {
+function AboutSection({ section }: { section: SectionData }) {
   return (
     <section className="py-16 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -155,14 +168,14 @@ function AboutSection({ section }: { section: any }) {
   );
 }
 
-async function DestinationsSection({ section }: { section: any }) {
-  const s = parseContent(section.content);
-  const topRoutes = s.topRoutes || [
+async function DestinationsSection({ section }: { section: SectionData }) {
+  const s = parseContent(section.content ?? "{}");
+  const topRoutes = (s.topRoutes as Array<{ from: string; to: string; fromIcon?: string; toIcon?: string }> | undefined) || [
     { from: "Jaipur", to: "Delhi", fromIcon: "/images/jaipur_card.png", toIcon: "" },
     { from: "Jaipur", to: "Udaipur", fromIcon: "/images/udaipur_card.png", toIcon: "" },
     { from: "Jaipur", to: "Jaisalmer", fromIcon: "/images/jaisalmer_card.png", toIcon: "" },
   ];
-  const viaRoutes = s.viaRoutes || [
+  const viaRoutes = (s.viaRoutes as Array<{ from: string; to: string }> | undefined) || [
     { from: "Jaipur", to: "Ajmer" },
     { from: "Jaipur", to: "Pushkar" },
     { from: "Jaipur", to: "Sikar" },
@@ -182,7 +195,7 @@ async function DestinationsSection({ section }: { section: any }) {
               <Star className="h-5 w-5 text-red-600" /> Top Routes
             </h3>
             <div className="space-y-3">
-              {topRoutes.map((r: any, i: number) => (
+              {topRoutes.map((r, i: number) => (
                 <div key={i} className="bg-white rounded-xl p-4 flex items-center gap-3 shadow-sm border border-gray-100">
                   <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
                     <MapPin className="h-5 w-5 text-red-600" />
@@ -202,7 +215,7 @@ async function DestinationsSection({ section }: { section: any }) {
               <MapPin className="h-5 w-5 text-red-600" /> Via Routes
             </h3>
             <div className="space-y-3">
-              {viaRoutes.map((r: any, i: number) => (
+              {viaRoutes.map((r, i: number) => (
                 <div key={i} className="bg-white rounded-xl p-4 flex items-center gap-3 shadow-sm border border-gray-100">
                   <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
                     <MapPin className="h-5 w-5 text-orange-600" />
@@ -222,14 +235,14 @@ async function DestinationsSection({ section }: { section: any }) {
   );
 }
 
-function WhyChooseUsSection({ section }: { section: any }) {
-  const s = parseContent(section.content);
-  const benefits = s.features || [
+function WhyChooseUsSection({ section }: { section: SectionData }) {
+  const s = parseContent(section.content ?? "{}");
+  const benefits = (s.features as Array<{ icon: string; title: string; desc: string }> | undefined) || [
     { icon: "Heart", title: "You're at the Heart of What We Do", desc: "We value punctuality delivering journeys that honor schedules, ensuring you reach your destination promptly, safely, and stress-free." },
     { icon: "Clock", title: "Punctual Journeys, Always", desc: "Every journey with us ensures comfort, trust, and satisfaction through safe travel, timely service, clean vehicles, and affordable fares." },
     { icon: "ShieldCheck", title: "Safety You Can Count On", desc: "Your safety is our priority. GPS-tracked vehicles, verified drivers, and 24/7 support ensure peace of mind throughout your journey." },
   ];
-  const iconMap: Record<string, any> = { Heart: Heart, Clock: Clock, ShieldCheck: ShieldCheck, Shield: Shield, Target: Target };
+  const iconMap: Record<string, LucideIcon> = { Heart: Heart, Clock: Clock, ShieldCheck: ShieldCheck, Shield: Shield, Target: Target };
   return (
     <section className="py-16 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -237,7 +250,7 @@ function WhyChooseUsSection({ section }: { section: any }) {
           <h2 className="text-3xl font-bold text-gray-900">{section.title || "Why Journey With Us"}</h2>
         </div>
         <div className="grid sm:grid-cols-3 gap-8">
-          {benefits.map((b: any, i: number) => {
+          {benefits.map((b, i: number) => {
             const Icon = iconMap[b.icon] || Heart;
             return (
               <div key={i} className="text-center p-8 rounded-xl bg-gray-50 border border-gray-100 hover:shadow-md transition-shadow">
@@ -255,15 +268,15 @@ function WhyChooseUsSection({ section }: { section: any }) {
   );
 }
 
-function FeaturesSection({ section }: { section: any }) {
-  const s = parseContent(section.content);
-  const features = s.features || [
+function FeaturesSection({ section }: { section: SectionData }) {
+  const s = parseContent(section.content ?? "{}");
+  const features = (s.features as Array<{ title: string; desc: string; icon: string }> | undefined) || [
     { title: "24/7 Customer Support", desc: "Receive instant help anytime with one call, guaranteeing safety, reliability, and full peace of mind.", icon: "HeadphonesIcon" },
     { title: "Clean Cars, Expert Drivers", desc: "Travel comfortably in well-maintained vehicles driven by experts focused on smooth, safe journeys.", icon: "Car" },
     { title: "Reliable Support at Every Step", desc: "Our supportive team is always available to help and guide you through your journey smoothly.", icon: "ShieldCheck" },
     { title: "Safe & Comfortable Rides", desc: "Enjoy safe, comfortable journeys with verified drivers and well-maintained vehicles for women and families.", icon: "Heart" },
   ];
-  const iconMap: Record<string, any> = { HeadphonesIcon: HeadphonesIcon, Car: Car, ShieldCheck: ShieldCheck, Heart: Heart, MapPin: MapPin };
+  const iconMap: Record<string, LucideIcon> = { HeadphonesIcon: HeadphonesIcon, Car: Car, ShieldCheck: ShieldCheck, Heart: Heart, MapPin: MapPin };
   return (
     <section className="py-16 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -274,7 +287,7 @@ function FeaturesSection({ section }: { section: any }) {
           </p>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {features.map((f: any, i: number) => {
+          {features.map((f, i: number) => {
             const Icon = iconMap[f.icon] || Shield;
             return (
               <div key={i} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-center hover:shadow-md transition-shadow group">
@@ -292,7 +305,7 @@ function FeaturesSection({ section }: { section: any }) {
   );
 }
 
-async function FleetSection({ section }: { section: any }) {
+async function FleetSection({ section }: { section: SectionData }) {
   const vehicles = await getFeaturedFleetVehicles();
   if (vehicles.length === 0) return null;
   return (
@@ -332,7 +345,7 @@ async function FleetSection({ section }: { section: any }) {
   );
 }
 
-async function TestimonialsSection({ section }: { section: any }) {
+async function TestimonialsSection({ section }: { section: SectionData }) {
   const testimonials = await getFeaturedTestimonials();
   if (testimonials.length === 0) return null;
   return (
@@ -360,7 +373,7 @@ async function TestimonialsSection({ section }: { section: any }) {
   );
 }
 
-async function FAQSection({ section }: { section: any }) {
+async function FAQSection({ section }: { section: SectionData }) {
   const faqs = await getHomepageFAQs();
   if (faqs.length === 0) return null;
   return (
@@ -390,7 +403,7 @@ async function FAQSection({ section }: { section: any }) {
   );
 }
 
-async function BlogsSection({ section }: { section: any }) {
+async function BlogsSection({ section }: { section: SectionData }) {
   const posts = await getFeaturedPosts();
   if (posts.length === 0) return null;
   return (
@@ -420,7 +433,7 @@ async function BlogsSection({ section }: { section: any }) {
   );
 }
 
-function CTASection({ section }: { section: any }) {
+function CTASection({ section }: { section: SectionData }) {
   return (
     <section className="py-16 bg-gradient-to-r from-red-700 to-red-600 text-white">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -435,7 +448,7 @@ function CTASection({ section }: { section: any }) {
   );
 }
 
-function ContactCTASection({ section }: { section: any }) {
+function ContactCTASection({ section }: { section: SectionData }) {
   return (
     <section className="py-16 bg-gray-900 text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -449,7 +462,7 @@ function ContactCTASection({ section }: { section: any }) {
   );
 }
 
-const SECTION_RENDERERS: Record<string, any> = {
+const SECTION_RENDERERS: Record<string, (props: { section: SectionData }) => React.ReactNode | Promise<React.ReactNode>> = {
   hero: HeroSection,
   stats: StatsSection,
   services: ServicesSection,

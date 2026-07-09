@@ -17,6 +17,18 @@ import {
 import { CalendarCheck, Car, MapPin, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
+interface BookingItem {
+  id: string;
+  bookingType: string;
+  createdAt: string;
+  status: string;
+  fare: number | null;
+  pickupAddress: string;
+  dropAddress?: string | null;
+  driver?: { name: string } | null;
+  vehicle?: { model: string; plateNumber: string } | null;
+}
+
 export default function CustomerBookingsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -37,7 +49,7 @@ export default function CustomerBookingsPage() {
     );
   }
 
-  const bookingsList = Array.isArray(bookings) ? bookings : [];
+  const bookingsList: BookingItem[] = Array.isArray(bookings) ? bookings : [];
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
@@ -55,7 +67,7 @@ export default function CustomerBookingsPage() {
       </div>
 
       <div className="space-y-4">
-        {bookingsList.map((booking: any) => (
+        {bookingsList.map((booking) => (
           <Link key={booking.id} href={`/customer/bookings/${booking.id}`}>
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="pt-6">
@@ -80,7 +92,7 @@ export default function CustomerBookingsPage() {
                       {booking.status.replace(/_/g, " ")}
                     </span>
                     <span className="font-semibold text-gray-900">
-                      {formatCurrency(booking.fare)}
+                      {formatCurrency(booking.fare ?? 0)}
                     </span>
                   </div>
                 </div>

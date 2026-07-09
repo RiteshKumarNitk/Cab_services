@@ -21,8 +21,10 @@ export default function AdminQuotationGenerator() {
     queryFn: () => fetch(`/api/bookings/${bookingId}`).then(res => res.json()),
   });
 
+  const defaultPricePerKm = booking?.preferredCategory === "SUV" ? 25 : 11;
+
   const [pricing, setPricing] = useState({
-    pricePerKm: 11,
+    pricePerKm: defaultPricePerKm,
     billableKm: 350,
     nightCharges: 0,
     parkingCharges: 0,
@@ -31,12 +33,6 @@ export default function AdminQuotationGenerator() {
     permitCharges: 0,
     discount: 0,
   });
-
-  useEffect(() => {
-    if (booking?.preferredCategory === "SUV") {
-      setPricing(prev => ({ ...prev, pricePerKm: 25 }));
-    }
-  }, [booking]);
 
   if (isLoading) return <div className="p-8 text-center">Loading...</div>;
   if (!booking) return <div className="p-8 text-center text-red-500">Booking not found.</div>;

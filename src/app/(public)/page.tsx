@@ -3,31 +3,13 @@ import Link from "next/link";
 import { Car, Star, Clock, MapPin, Shield, ArrowRight, Phone, CheckCircle2, Users, Luggage, Snowflake, Quote, Wifi, Music, Wind, Battery, Target, Heart, ShieldCheck, HeadphonesIcon, Bus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TripRequestForm } from "@/components/TripRequestForm";
+import { HomeHero } from "./_components/home-hero";
 
 function parseContent(content: string): Record<string, any> {
   try { return JSON.parse(content); } catch { return {}; }
 }
 
-async function HeroSection({ section }: { section: any }) {
-  return (
-    <section className="relative bg-gradient-to-br from-red-900 via-red-800 to-red-700 text-white overflow-hidden">
-      {section.image && <img src={section.image} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />}
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl md:text-5xl font-bold mb-3">
-            {section.title || "Book Premium Cabs & Travel in Comfort"}
-          </h1>
-          <p className="text-base md:text-lg text-red-100 max-w-2xl mx-auto">
-            {section.subtitle || "Reliable, comfortable, and affordable cab service. Book your ride today!"}
-          </p>
-        </div>
-        <div className="max-w-4xl mx-auto">
-          <TripRequestForm />
-        </div>
-      </div>
-    </section>
-  );
-}
+const HeroSection = HomeHero;
 
 function StatsSection({ section }: { section: any }) {
   const s = parseContent(section.content);

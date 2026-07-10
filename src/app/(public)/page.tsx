@@ -1,6 +1,6 @@
-import { getHomepageSections, getWebsiteSettings, getFeaturedFleetVehicles, getFeaturedTestimonials, getHomepageFAQs, getFeaturedPosts } from "@/lib/cms";
+import { getHomepageSections, getWebsiteSettings, getFeaturedFleetVehicles, getFeaturedTestimonials, getHomepageFAQs, getFeaturedPosts, getGalleryItems } from "@/lib/cms";
 import Link from "next/link";
-import { Car, Star, Clock, MapPin, Shield, ArrowRight, Phone, CheckCircle2, Users, Luggage, Snowflake, Quote, Wifi, Music, Wind, Battery, Target, Heart, ShieldCheck, HeadphonesIcon, type LucideIcon } from "lucide-react";
+import { Car, Star, Clock, MapPin, Shield, ArrowRight, Phone, CheckCircle2, Users, Luggage, Snowflake, Quote, Wifi, Music, Wind, Battery, Target, Heart, ShieldCheck, HeadphonesIcon, Play, Award, BadgePercent, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TripRequestForm } from "@/components/TripRequestForm";
 import { HomeHero } from "./_components/home-hero";
@@ -455,7 +455,188 @@ function ContactCTASection({ section }: { section: SectionData }) {
         <h2 className="text-3xl font-bold mb-4">{section.title || "Have Questions?"}</h2>
         <p className="text-gray-400 mb-8 max-w-xl mx-auto">{section.subtitle || "Our team is available 24/7 to help you with bookings and inquiries."}</p>
         <div className="flex flex-wrap justify-center gap-4">
-          {section.ctaText && <Link href={section.ctaLink || "/contact"}><Button size="lg" className="bg-red-600 hover:bg-red-700">{section.ctaText}</Button></Link>}
+          {section.ctaText && <Link href={section.ctaLink || "/contact"}><Button size="lg" className="bg-red-700 hover:bg-red-800">{section.ctaText}</Button></Link>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PackagesSection({ section }: { section: SectionData }) {
+  const s = parseContent(section.content ?? "{}");
+  const packages = (s.packages as Array<{ title: string; duration: string; price: string; rating: number; reviews: number; image?: string }> | undefined) || [
+    { title: "Golden Triangle Tour", duration: "4 Days / 3 Nights", price: "₹12,500", rating: 4.8, reviews: 127 },
+    { title: "Rajasthan Heritage Tour", duration: "7 Days / 6 Nights", price: "₹22,000", rating: 4.9, reviews: 89 },
+    { title: "Desert Safari Special", duration: "5 Days / 4 Nights", price: "₹16,800", rating: 4.7, reviews: 64 },
+  ];
+  return (
+    <section className="py-16 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900">{section.title || "Featured Tour Packages"}</h2>
+          {section.subtitle && <p className="text-gray-500 mt-2">{section.subtitle}</p>}
+          {!section.subtitle && <p className="text-gray-500 mt-2">Curated itineraries for unforgettable journeys</p>}
+        </div>
+        <div className="grid md:grid-cols-3 gap-8">
+          {packages.map((pkg, i) => (
+            <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group">
+              <div className="h-44 bg-gradient-to-br from-red-100 to-amber-50 relative">
+                {pkg.image ? <img src={pkg.image} alt={pkg.title} className="w-full h-full object-cover" /> : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <MapPin className="h-12 w-12 text-red-300" />
+                  </div>
+                )}
+                <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold text-gray-900">
+                  {pkg.duration}
+                </div>
+              </div>
+              <div className="p-5">
+                <h3 className="font-bold text-gray-900 mb-2 group-hover:text-red-700 transition-colors">{pkg.title}</h3>
+                <div className="flex items-center gap-3 text-sm mb-4">
+                  <span className="flex items-center gap-1 text-amber-600"><Star className="h-3.5 w-3.5 fill-amber-400" /> {pkg.rating}</span>
+                  <span className="text-gray-400">({pkg.reviews} reviews)</span>
+                </div>
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <span className="text-xl font-bold text-gray-900">{pkg.price}<span className="text-sm font-normal text-gray-500">/person</span></span>
+                  <Link href="/tours"><span className="text-red-700 text-sm font-medium flex items-center gap-1 hover:gap-2 transition-all">View Details <ArrowRight className="h-3.5 w-3.5" /></span></Link>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {packages.length > 0 && (
+          <div className="text-center mt-8">
+            <Link href="/tours"><Button variant="outline" className="border-red-200 text-red-700 hover:bg-red-50">View All Packages <ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function OffersSection({ section }: { section: SectionData }) {
+  const s = parseContent(section.content ?? "{}");
+  const offers = (s.offers as Array<{ title: string; description: string; discount: string; validUntil: string; image?: string }> | undefined) || [
+    { title: "Weekend Special", description: "Flat 20% off on all outstation bookings", discount: "20% OFF", validUntil: "Jul 31, 2026" },
+    { title: "Airport Transfer", description: "Complimentary 1-hour waiting on airport pickups", discount: "Free Wait", validUntil: "Aug 15, 2026" },
+    { title: "Group Booking", description: "Special rates for groups of 6+ passengers", discount: "Up to 30%", validUntil: "Ongoing" },
+  ];
+  return (
+    <section className="py-16 bg-gradient-to-br from-red-50 to-amber-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900">{section.title || "Special Offers"}</h2>
+          {section.subtitle && <p className="text-gray-500 mt-2">{section.subtitle}</p>}
+          {!section.subtitle && <p className="text-gray-500 mt-2">Limited-time deals to make your travel more affordable</p>}
+        </div>
+        <div className="grid md:grid-cols-3 gap-6">
+          {offers.map((offer, i) => (
+            <div key={i} className="bg-white rounded-xl p-6 shadow-sm border border-amber-100 hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center">
+                  <BadgePercent className="h-5 w-5 text-amber-600" />
+                </div>
+                <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-full">{offer.discount}</span>
+              </div>
+              <h3 className="font-bold text-gray-900 mb-1">{offer.title}</h3>
+              <p className="text-sm text-gray-500 mb-3">{offer.description}</p>
+              <p className="text-xs text-amber-600 font-medium">Valid until: {offer.validUntil}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+async function GallerySection({ section }: { section: SectionData }) {
+  const gallery = await getGalleryItems();
+  const items = gallery.length > 0 ? gallery.slice(0, 6) : [];
+  if (items.length === 0) return null;
+  return (
+    <section className="py-16 bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900">{section.title || "Our Gallery"}</h2>
+          {section.subtitle && <p className="text-gray-500 mt-2">{section.subtitle}</p>}
+          {!section.subtitle && <p className="text-gray-500 mt-2">Moments captured from our journeys</p>}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {items.map((item) => (
+            <div key={item.id} className="relative group overflow-hidden rounded-xl aspect-[4/3]">
+              <img src={item.imageUrl} alt={item.altText || item.title || ""} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+              {item.title && (
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <span className="text-white text-sm font-medium px-4 text-center">{item.title}</span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="text-center mt-8">
+          <Link href="/gallery"><Button variant="outline" className="border-red-200 text-red-700 hover:bg-red-50">View Full Gallery <ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function VideosSection({ section }: { section: SectionData }) {
+  const s = parseContent(section.content ?? "{}");
+  const videos = (s.videos as Array<{ title: string; url: string; thumbnail?: string }> | undefined) || [];
+  if (videos.length === 0) return null;
+  return (
+    <section className="py-16 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900">{section.title || "Travel Videos"}</h2>
+          <p className="text-gray-500 mt-2">{section.subtitle || "Experience Rajasthan through our lens"}</p>
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {videos.slice(0, 3).map((video, i) => (
+            <a key={i} href={video.url} target="_blank" rel="noopener noreferrer" className="group block">
+              <div className="relative aspect-video bg-gray-100 rounded-xl overflow-hidden">
+                {video.thumbnail ? <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" /> : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-red-100 to-gray-100">
+                    <Play className="h-12 w-12 text-red-400" />
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="h-14 w-14 rounded-full bg-red-700 flex items-center justify-center">
+                    <Play className="h-6 w-6 text-white ml-0.5" />
+                  </div>
+                </div>
+              </div>
+              {video.title && <p className="text-sm font-medium text-gray-700 mt-2">{video.title}</p>}
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PartnersSection({ section }: { section: SectionData }) {
+  const s = parseContent(section.content ?? "{}");
+  const partners = (s.partners as Array<{ name: string; logo?: string }> | undefined) || [
+    { name: "Rajasthan Tourism" },
+    { name: "IRCTC" },
+    { name: "MakeMyTrip" },
+    { name: "Booking.com" },
+  ];
+  return (
+    <section className="py-12 bg-white border-t border-gray-100">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-8">
+          <h2 className="text-xl font-bold text-gray-900">{section.title || "Trusted & Certified"}</h2>
+        </div>
+        <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12">
+          {partners.map((partner, i) => (
+            <div key={i} className="flex items-center gap-2 text-gray-400 hover:text-gray-600 transition-colors">
+              <Award className="h-6 w-6" />
+              <span className="font-semibold text-sm">{partner.name}</span>
+            </div>
+          ))}
         </div>
       </div>
     </section>
@@ -477,6 +658,11 @@ const SECTION_RENDERERS: Record<string, (props: { section: SectionData }) => Rea
   blogs: BlogsSection,
   cta: CTASection,
   footer_cta: ContactCTASection,
+  packages: PackagesSection,
+  offers: OffersSection,
+  gallery: GallerySection,
+  videos: VideosSection,
+  partners: PartnersSection,
 };
 
 export default async function HomePage() {
@@ -494,6 +680,10 @@ export default async function HomePage() {
     { type: "destinations", key: "destinations" },
     { type: "why_choose_us", key: "why_choose_us" },
     { type: "features", key: "features" },
+    { type: "packages", key: "packages" },
+    { type: "offers", key: "offers" },
+    { type: "gallery", key: "gallery" },
+    { type: "partners", key: "partners" },
   ];
 
   return (
@@ -509,9 +699,13 @@ export default async function HomePage() {
           <WhyChooseUsSection section={{}} />
           <FeaturesSection section={{}} />
           <FleetSection section={{}} />
+          <PackagesSection section={{}} />
+          <OffersSection section={{}} />
+          <GallerySection section={{}} />
           <TestimonialsSection section={{}} />
           <FAQSection section={{}} />
           <BlogsSection section={{}} />
+          <PartnersSection section={{}} />
           <CTASection section={{}} />
         </>
       ) : (

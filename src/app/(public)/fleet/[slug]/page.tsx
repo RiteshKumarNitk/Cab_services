@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { getFleetVehicleBySlug, getFleetVehicles, getWebsiteSettings } from "@/lib/cms";
 import Link from "next/link";
-import { ArrowLeft, Users, Luggage, Snowflake, Fuel, Gauge, Star, Check, Phone } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft, Users, Luggage, Snowflake, Fuel, Gauge, Star, Check } from "lucide-react";
+import { FleetBookingCard } from "@/components/fleet/booking-card";
 
 export default async function FleetDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -101,39 +101,12 @@ export default async function FleetDetailPage({ params }: { params: Promise<{ sl
           </div>
 
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 sticky top-24">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Pricing</h3>
-
-              <div className="space-y-3 mb-6">
-                <div className="flex justify-between py-2 border-b border-gray-100">
-                  <span className="text-gray-500">Price per KM</span>
-                  <span className="font-bold text-gray-900">₹{vehicle.pricePerKm}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-gray-100">
-                  <span className="text-gray-500">Minimum KM</span>
-                  <span className="font-semibold">{vehicle.minKmPerDay} km</span>
-                </div>
-                {vehicle.nightCharge > 0 && (
-                  <div className="flex justify-between py-2 border-b border-gray-100">
-                    <span className="text-gray-500">Night Charges</span>
-                    <span className="font-semibold">₹{vehicle.nightCharge}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-3">
-                <a href={`tel:${phone}`}>
-                  <Button className="w-full bg-red-600 hover:bg-red-700 text-white">
-                    <Phone className="h-4 w-4 mr-2" /> Call Now
-                  </Button>
-                </a>
-                <a href={`https://wa.me/${whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer">
-                  <Button variant="outline" className="w-full border-emerald-500 text-emerald-600 hover:bg-emerald-50">
-                    Book via WhatsApp
-                  </Button>
-                </a>
-              </div>
-            </div>
+            <FleetBookingCard
+              vehicleName={vehicle.name}
+              pricePerKm={vehicle.pricePerKm}
+              phone={phone}
+              whatsapp={whatsapp}
+            />
           </div>
         </div>
       </div>

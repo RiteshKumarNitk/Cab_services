@@ -18,7 +18,6 @@ import {
   formatCurrency,
   formatDateTime,
   getBookingTypeName,
-  haversineDistance,
 } from "@/lib/utils";
 import {
   Car,
@@ -31,6 +30,9 @@ import {
   XCircle,
   PlayCircle,
   DollarSign,
+  AlertTriangle,
+  Camera,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -49,7 +51,6 @@ export default function DriverDashboard() {
       router.push("/");
     }
 
-    // Fetch current online status
     if (status === "authenticated") {
       fetch("/api/drivers/location", {
         method: "POST",
@@ -68,15 +69,10 @@ export default function DriverDashboard() {
             lng: position.coords.longitude,
           });
         },
-        (error) => {
-          console.error("Geolocation error:", error);
+        () => {
           toast.error("Failed to get location. Please enable GPS.");
         },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 5000,
-        }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
       );
       setLocationWatchId(watchId);
     } else {
@@ -94,12 +90,7 @@ export default function DriverDashboard() {
   const handleToggleOnline = async (online: boolean) => {
     setIsOnline(online);
     try {
-      await updateLocation.mutateAsync({
-        lat: 0,
-        lng: 0,
-        online,
-      });
-
+      await updateLocation.mutateAsync({ lat: 0, lng: 0, online });
       if (online) {
         startLocationTracking();
         toast.success("You are now online and accepting rides!");
@@ -113,7 +104,6 @@ export default function DriverDashboard() {
     }
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (locationWatchId !== null) {
@@ -122,11 +112,7 @@ export default function DriverDashboard() {
     };
   }, [locationWatchId]);
 
-  const handleUpdateStatus = async (
-    bookingId: string,
-    newStatus: string,
-    reason?: string
-  ) => {
+  const handleUpdateStatus = async (bookingId: string, newStatus: string, reason?: string) => {
     await updateStatus.mutateAsync({ id: bookingId, status: newStatus, reason });
   };
 
@@ -136,17 +122,40 @@ export default function DriverDashboard() {
     (b: { status: string }) => b.status === "REQUESTED"
   );
   const activeBookings = bookingsList.filter((b: { status: string }) =>
-    ["ACCEPTED", "STARTED"].includes(b.status)
+    ["ACCEPTED", "STARTED", "TRIP_STARTED", "PICKUP_COMPLETED"].includes(b.status)
   );
   const completedBookings = bookingsList.filter(
     (b: { status: string }) =>
-      b.status === "COMPLETED" || b.status === "CANCELLED"
+      b.status === "COMPLETED" || b.status === "TRIP_COMPLETED" || b.status === "CANCELLED"
   );
 
-  // Calculate earnings
   const totalEarnings = completedBookings
-    .filter((b: { status: string }) => b.status === "COMPLETED")
+    .filter((b: { status: string }) => b.status === "COMPLETED" || b.status === "TRIP_COMPLETED")
     .reduce((sum: number, b: { fare: number }) => sum + b.fare, 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayBookings = bookingsList.filter(
+    (b: { createdAt: string }) => new Date(b.createdAt) >= today
+  );
+  const todayStats = {
+    total: todayBookings.length,
+    completed: todayBookings.filter(
+      (b: { status: string }) => b.status === "COMPLETED" || b.status === "TRIP_COMPLETED"
+    ).length,
+    active: todayBookings.filter(
+      (b: { status: string }) =>
+        ["ACCEPTED", "STARTED", "TRIP_STARTED", "PICKUP_COMPLETED"].includes(b.status)
+    ).length,
+    cancelled: todayBookings.filter(
+      (b: { status: string }) => b.status === "CANCELLED"
+    ).length,
+  };
+
+  const nextTrip = bookingsList.find(
+    (b: { status: string }) =>
+      ["DRIVER_ASSIGNED", "READY_FOR_DISPATCH", "ACCEPTED"].includes(b.status)
+  );
 
   if (status === "loading" || isLoading) {
     return (
@@ -197,7 +206,7 @@ export default function DriverDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-6 mb-8">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">
@@ -234,7 +243,102 @@ export default function DriverDashboard() {
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-gray-400" />
+              Today&apos;s Trips
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-gray-900">
+              {todayStats.total}
+            </div>
+            <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-green-500" />
+                {todayStats.completed}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-blue-500" />
+                {todayStats.active}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-red-400" />
+                {todayStats.cancelled}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+        <Button
+          variant="outline"
+          className="h-24 flex-col gap-2"
+          disabled={!nextTrip}
+          onClick={() => nextTrip && router.push(`/driver/trips/${nextTrip.id}`)}
+        >
+          <PlayCircle className="h-6 w-6 text-green-600" />
+          <span className="text-xs font-normal">Start Trip</span>
+        </Button>
+        <Button
+          variant="outline"
+          className="h-24 flex-col gap-2"
+          onClick={() => router.push("/driver/incidents")}
+        >
+          <AlertTriangle className="h-6 w-6 text-red-500" />
+          <span className="text-xs font-normal">Report Incident</span>
+        </Button>
+        <Button
+          variant="outline"
+          className="h-24 flex-col gap-2"
+          onClick={() => router.push("/driver/expenses")}
+        >
+          <DollarSign className="h-6 w-6 text-blue-600" />
+          <span className="text-xs font-normal">Log Expense</span>
+        </Button>
+        <Button
+          variant="outline"
+          className="h-24 flex-col gap-2"
+          disabled={!nextTrip}
+          onClick={() => nextTrip && router.push(`/driver/trips/${nextTrip.id}`)}
+        >
+          <Camera className="h-6 w-6 text-purple-600" />
+          <span className="text-xs font-normal">Upload Images</span>
+        </Button>
+      </div>
+
+      {/* Next Trip Guidance */}
+      {nextTrip && (
+        <Card className="mb-8 border-l-4 border-l-green-500 bg-green-50/50">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Navigation className="h-5 w-5 text-green-600 shrink-0" />
+                <div>
+                  <p className="font-semibold text-green-800">Next Trip</p>
+                  <p className="text-sm text-green-700">
+                    {getBookingTypeName(nextTrip.bookingType)} — {nextTrip.customer?.name}
+                  </p>
+                  <p className="text-xs text-green-600">
+                    {nextTrip.pickupAddress}
+                    {nextTrip.dropAddress ? ` → ${nextTrip.dropAddress}` : ""}
+                  </p>
+                </div>
+              </div>
+              <Button
+                className="bg-green-600 hover:bg-green-700 shrink-0"
+                onClick={() => router.push(`/driver/trips/${nextTrip.id}`)}
+              >
+                <PlayCircle className="h-4 w-4 mr-2" />
+                Go to Trip
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Ride Requests */}
@@ -405,22 +509,44 @@ export default function DriverDashboard() {
                           <Button
                             className="flex-1"
                             onClick={() =>
-                              handleUpdateStatus(booking.id, "STARTED")
+                              handleUpdateStatus(booking.id, "TRIP_STARTED")
                             }
                           >
                             <PlayCircle className="h-4 w-4 mr-2" />
                             Start Ride
                           </Button>
                         )}
-                        {booking.status === "STARTED" && (
+                        {(booking.status === "STARTED" || booking.status === "TRIP_STARTED") && (
                           <Button
                             className="flex-1"
                             onClick={() =>
-                              handleUpdateStatus(booking.id, "COMPLETED")
+                              handleUpdateStatus(booking.id, "PICKUP_COMPLETED")
                             }
                           >
                             <CheckCircle className="h-4 w-4 mr-2" />
-                            Complete Ride
+                            Complete Pickup
+                          </Button>
+                        )}
+                        {booking.status === "PICKUP_COMPLETED" && (
+                          <Button
+                            className="flex-1"
+                            onClick={() =>
+                              handleUpdateStatus(booking.id, "DROP_COMPLETED")
+                            }
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Complete Drop
+                          </Button>
+                        )}
+                        {booking.status === "DROP_COMPLETED" && (
+                          <Button
+                            className="flex-1"
+                            onClick={() =>
+                              handleUpdateStatus(booking.id, "TRIP_COMPLETED")
+                            }
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            End Trip
                           </Button>
                         )}
                         <Button
@@ -478,7 +604,7 @@ export default function DriverDashboard() {
                             </p>
                             <Badge
                               variant={
-                                booking.status === "COMPLETED"
+                                booking.status === "COMPLETED" || booking.status === "TRIP_COMPLETED"
                                   ? "default"
                                   : "secondary"
                               }

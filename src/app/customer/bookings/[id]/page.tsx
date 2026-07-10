@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/utils";
 import { ArrowLeft, CheckCircle, Car, MapPin, User, FileText, Phone } from "lucide-react";
 
+interface TimelineEntry {
+  label: string;
+  order: number;
+  completed: boolean;
+  active: boolean;
+}
+
 export default function CustomerTripDetails() {
   const params = useParams();
   const router = useRouter();
@@ -20,146 +27,181 @@ export default function CustomerTripDetails() {
   if (isLoading) return <div className="p-8 text-center">Loading trip details...</div>;
   if (!booking) return <div className="p-8 text-center text-red-500">Trip not found.</div>;
 
-  const isQuotation = booking.status === "PRICE_SENT";
+  const isQuotation = booking.status === "QUOTE_SENT" || booking.status === "PRICE_SENT";
+  const canConfirm = booking.status === "QUOTE_SENT" || booking.status === "PRICE_SENT" || booking.status === "QUOTE_PREPARING";
 
   const handleConfirm = async () => {
     try {
       await fetch(`/api/bookings/${bookingId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "CONFIRMED" }),
+        body: JSON.stringify({ status: "QUOTE_ACCEPTED" }),
       });
-      router.push("/customer/bookings");
       router.refresh();
-    } catch {
-      alert("Failed to confirm. Please try again.");
+    } catch (err) {
+      console.error("Failed to confirm:", err);
     }
   };
 
+  const handleCancel = async () => {
+    if (!confirm("Are you sure you want to cancel this booking?")) return;
+    try {
+      await fetch(`/api/bookings/${bookingId}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "CANCELLED" }),
+      });
+      router.refresh();
+    } catch (err) {
+      console.error("Failed to cancel:", err);
+    }
+  };
+
+  const timeline: TimelineEntry[] = booking.timeline || [];
+
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <Button variant="ghost" onClick={() => router.back()} className="mb-4">
-        <ArrowLeft className="h-4 w-4 mr-2" /> Back
-      </Button>
+    <div className="max-w-4xl mx-auto space-y-6">
+      <button onClick={() => router.back()} className="flex items-center text-gray-500 hover:text-gray-700">
+        <ArrowLeft className="h-4 w-4 mr-1" /> Back
+      </button>
 
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{isQuotation ? "Quotation Review" : "Trip Details"}</h1>
-          <p className="text-gray-500 text-sm">Booking ID: {booking.id?.split("-")[0]}</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Timeline */}
+        <div className="lg:col-span-1">
+          <Card className="border-0 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">Trip Progress</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {timeline.length > 0 ? (
+                <div className="space-y-0">
+                  {timeline.map((step, i) => (
+                    <div key={i} className="flex items-start gap-3 pb-4 last:pb-0">
+                      <div className="flex flex-col items-center">
+                        <div className={`h-6 w-6 rounded-full flex items-center justify-center ${
+                          step.completed ? "bg-emerald-500" : step.active ? "bg-blue-500" : "bg-gray-200"
+                        }`}>
+                          {step.completed && <CheckCircle className="h-4 w-4 text-white" />}
+                          {step.active && !step.completed && <div className="h-2 w-2 bg-white rounded-full animate-pulse" />}
+                        </div>
+                        {i < timeline.length - 1 && <div className="w-0.5 h-8 bg-gray-200" />}
+                      </div>
+                      <div className={`pt-0.5 ${step.active ? "font-medium text-blue-600" : step.completed ? "text-gray-600" : "text-gray-400"}`}>
+                        {step.label}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">Timeline unavailable</p>
+              )}
+
+              <div className="mt-6 space-y-3">
+                {isQuotation && (
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <p className="text-sm text-blue-800 font-medium">Quotation Ready</p>
+                    <p className="text-xs text-blue-600 mt-1">Please review and confirm to proceed</p>
+                  </div>
+                )}
+                {canConfirm && (
+                  <Button onClick={handleConfirm} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
+                    <CheckCircle className="h-4 w-4 mr-2" /> Accept & Confirm
+                  </Button>
+                )}
+                <Button onClick={handleCancel} variant="outline" className="w-full border-red-200 text-red-600 hover:bg-red-50">
+                  Cancel Booking
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        <span className={`px-4 py-1.5 rounded-full text-sm font-bold ${
-          isQuotation ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800"
-        }`}>
-          {booking.status?.replace(/_/g, " ")}
-        </span>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader className="pb-2">
+        {/* Booking Details */}
+        <div className="lg:col-span-2 space-y-6">
+          <Card className="border-0 shadow-sm">
+            <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <MapPin className="h-5 w-5 text-red-600" /> Itinerary
+                <MapPin className="h-5 w-5 text-red-600" />
+                Trip Details
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="relative pl-6 border-l-2 border-gray-200 space-y-6 ml-2 mt-2">
-                <div className="relative">
-                  <div className="absolute -left-[31px] top-1 h-4 w-4 rounded-full bg-red-600 border-4 border-white" />
-                  <p className="text-sm font-semibold text-gray-500">PICKUP</p>
-                  <p className="font-medium text-lg">{booking.pickupAddress}</p>
-                  <p className="text-gray-500 text-sm">{formatDateTime(booking.pickupDate)}</p>
-                </div>
-                <div className="relative">
-                  <div className="absolute -left-[31px] top-1 h-4 w-4 rounded-full bg-gray-400 border-4 border-white" />
-                  <p className="text-sm font-semibold text-gray-500">DROP</p>
-                  <p className="font-medium text-lg">{booking.dropAddress || "TBD"}</p>
-                  {booking.returnDate && (
-                    <p className="text-gray-500 text-sm">{formatDateTime(booking.returnDate)}</p>
-                  )}
-                </div>
-              </div>
-              <div className="pt-4 mt-4 border-t grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <span className="text-gray-500 block">Trip Type</span>
-                  <span className="font-semibold">{booking.tripType}</span>
+                  <p className="text-xs font-medium text-gray-400 uppercase">Pickup</p>
+                  <p className="text-sm text-gray-900">{booking.pickupAddress}</p>
+                  <p className="text-xs text-gray-500">{formatDateTime(booking.pickupDate)}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500 block">Car Category</span>
-                  <span className="font-semibold">{booking.preferredCategory}</span>
+                  <p className="text-xs font-medium text-gray-400 uppercase">Drop</p>
+                  <p className="text-sm text-gray-900">{booking.dropAddress}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-400 uppercase">Passengers</p>
+                  <p className="text-sm text-gray-900">{booking.passengers}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-400 uppercase">Status</p>
+                  <p className="text-sm text-gray-900">{booking.customerFacingStatus || booking.status?.replace(/_/g, " ")}</p>
                 </div>
               </div>
+              {booking.totalFare ? (
+                <div className="pt-3 border-t border-gray-100">
+                  <p className="text-xs font-medium text-gray-400 uppercase">Total Fare</p>
+                  <p className="text-xl font-bold text-gray-900">₹{booking.totalFare.toLocaleString()}</p>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
-          {booking.driver && (
-            <Card className="border-green-100 shadow-sm">
-              <CardHeader className="bg-green-50 pb-2">
-                <CardTitle className="text-lg flex items-center gap-2 text-green-800">
-                  <User className="h-5 w-5" /> Assigned Driver
+          {booking.vehicle && (
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Car className="h-5 w-5 text-blue-600" />
+                  Vehicle
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-4 flex gap-4 items-center">
-                <div className="h-16 w-16 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
-                  <User className="h-8 w-8 text-gray-400" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg">{booking.driver.name}</h3>
-                  <p className="text-gray-600">{booking.driver.phone}</p>
-                  {booking.vehicle && (
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded mt-1 inline-block">{booking.vehicle.model} - {booking.vehicle.plateNumber}</span>
-                  )}
-                </div>
+              <CardContent>
+                <p className="font-medium text-gray-900">{booking.vehicle.name}</p>
+                <p className="text-sm text-gray-500">{booking.vehicle.plateNumber}</p>
               </CardContent>
             </Card>
           )}
-        </div>
 
-        <div>
-          <Card className="shadow-lg border-t-4 border-t-red-600">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg flex items-center justify-between">
-                <span className="flex items-center gap-2"><FileText className="h-5 w-5 text-red-600" /> {isQuotation ? "Quotation" : "Invoice"}</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between py-1">
-                  <span className="text-gray-600">Base Fare</span>
-                  <span className="font-medium">₹{booking.baseFare || 0}</span>
+          {booking.driver && (
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <User className="h-5 w-5 text-purple-600" />
+                  Driver
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900">{booking.driver.name}</p>
+                  <p className="text-sm text-gray-500">{booking.driver.phone}</p>
                 </div>
-                {booking.nightCharges > 0 && (
-                  <div className="flex justify-between py-1">
-                    <span className="text-gray-600">Night Allowance</span>
-                    <span className="font-medium">₹{booking.nightCharges}</span>
-                  </div>
-                )}
-                {(booking.stateTax || booking.permitCharges) > 0 && (
-                  <div className="flex justify-between py-1">
-                    <span className="text-gray-600">Taxes / Permit</span>
-                    <span className="font-medium">₹{(booking.stateTax || 0) + (booking.permitCharges || 0)}</span>
-                  </div>
-                )}
-                <div className="border-t my-2 pt-2" />
-                <div className="flex justify-between py-1 font-bold text-lg">
-                  <span>Total Amount</span>
-                  <span className="text-red-600">₹{booking.totalFare || booking.fare}</span>
-                </div>
-
-                {isQuotation && (
-                  <div className="bg-red-50 text-red-800 p-3 rounded-md text-xs mt-4">
-                    <strong>Note:</strong> Toll taxes and parking charges are extra and payable as per actuals.
-                  </div>
-                )}
-              </div>
-
-              {isQuotation && (
-                <Button className="w-full mt-6 bg-red-600 hover:bg-red-700 text-lg py-6" onClick={handleConfirm}>
-                  <CheckCircle className="mr-2 h-5 w-5" /> Accept & Confirm
+                <Button size="sm" variant="outline" className="border-gray-200">
+                  <Phone className="h-4 w-4 mr-2" /> Call
                 </Button>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
+
+          {booking.specialInstructions && (
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-gray-600" />
+                  Instructions
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-700">{booking.specialInstructions}</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

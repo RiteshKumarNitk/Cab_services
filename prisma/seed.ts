@@ -3,8 +3,53 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+async function generateBookingNumber(): Promise<string> {
+  const count = await prisma.booking.count();
+  return `BK-${String(count + 1).padStart(5, "0")}`;
+}
+
+async function generateLeadNumber(): Promise<string> {
+  const count = await prisma.lead.count();
+  return `LD-${String(count + 1).padStart(5, "0")}`;
+}
+
 async function main() {
   console.log("Seeding database...");
+
+  // ====== ORGANIZATION & BRANCH ======
+  const org = await prisma.organization.upsert({
+    where: { slug: "aradhana-travel" },
+    update: {},
+    create: {
+      name: "Aradhana Travel Services",
+      slug: "aradhana-travel",
+      logo: "",
+      address: "G-3A, Rajputana Tower, Khatipura",
+      city: "Jaipur",
+      state: "Rajasthan",
+      zipCode: "302012",
+      phone: "+91 98765 43210",
+      email: "info@aradhanatravel.com",
+    },
+  });
+  console.log("Created organization:", org.name);
+
+  const branch = await prisma.branch.upsert({
+    where: { slug: "jaipur-head-office" },
+    update: {},
+    create: {
+      name: "Jaipur Head Office",
+      slug: "jaipur-head-office",
+      organizationId: org.id,
+      address: "G-3A, Rajputana Tower, Khatipura",
+      city: "Jaipur",
+      state: "Rajasthan",
+      zipCode: "302012",
+      phone: "+91 98765 43210",
+      email: "jaipur@aradhanatravel.com",
+    },
+  });
+  console.log("Created branch:", branch.name);
 
   // Create admin user
   const adminPassword = await bcrypt.hash("admin123", 12);
@@ -17,9 +62,17 @@ async function main() {
       name: "Aradhana Admin",
       phone: "08069247178",
       role: "ADMIN",
+      organizationId: org.id,
+      branchId: branch.id,
     },
   });
   console.log("Created admin user:", admin.email);
+
+  // Update branch manager
+  await prisma.branch.update({
+    where: { id: branch.id },
+    data: { managerId: admin.id },
+  });
 
   // Create sample driver
   const driverPassword = await bcrypt.hash("driver123", 12);
@@ -32,6 +85,8 @@ async function main() {
       name: "Rahul Sharma",
       phone: "9876543210",
       role: "DRIVER",
+      organizationId: org.id,
+      branchId: branch.id,
     },
   });
 
@@ -60,6 +115,34 @@ async function main() {
     },
   });
   console.log("Created customer user:", customer.email);
+
+  // ====== SAMPLE LEAD ======
+  const leadNumber = await generateLeadNumber();
+  const lead = await prisma.lead.create({
+    data: {
+      leadNumber,
+      status: "NEW",
+      source: "WEBSITE",
+      name: "Amit Verma",
+      email: "amit@example.com",
+      phone: "9876543212",
+      city: "Jaipur",
+      bookingType: "OUTSTATION",
+      tripType: "ROUND_TRIP",
+      pickupAddress: "Jaipur Airport",
+      dropAddress: "Udaipur City Palace",
+      pickupDate: new Date(Date.now() + 7 * 86400000),
+      passengers: 2,
+      preferredVehicle: "SUV",
+      notes: "Interested in a round trip to Udaipur. Needs pickup from airport.",
+      assignedToId: admin.id,
+      branchId: branch.id,
+    },
+  });
+  console.log("Created sample lead:", lead.leadNumber);
+
+  // Create sample booking
+  const bookingNumber = await generateBookingNumber();
 
   // Create vehicles
   const vehicles = [
@@ -113,6 +196,8 @@ async function main() {
   // Create a sample completed booking for demo
   const sampleBooking = await prisma.booking.create({
     data: {
+      bookingNumber,
+      leadId: lead.id,
       customerId: customer.id,
       driverId: driver.id,
       bookingType: "LOCAL",
@@ -129,9 +214,10 @@ async function main() {
       status: "COMPLETED",
       paymentStatus: "PAID",
       paymentMethod: "CASH",
+      branchId: branch.id,
     },
   });
-  console.log("Created sample booking");
+  console.log("Created sample booking:", sampleBooking.bookingNumber);
 
   // ====== CMS: Website Settings ======
   const defaultSettings = [

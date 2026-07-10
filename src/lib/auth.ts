@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { verifyAuthToken } from "@/lib/otp";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -19,6 +20,22 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const email = credentials.email as string;
         const password = credentials.password as string;
 
+        // OTP login flow: password is the one-time auth token
+        const otpUser = verifyAuthToken(password);
+        if (otpUser && otpUser.email === email) {
+          const user = await prisma.user.findUnique({ where: { email } });
+          if (!user) throw new Error("User not found");
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            phone: user.phone,
+            profilePic: user.profilePic,
+          };
+        }
+
+        // Normal email/password login
         const user = await prisma.user.findUnique({
           where: { email },
         });

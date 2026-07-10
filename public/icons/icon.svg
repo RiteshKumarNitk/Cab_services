@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="64" fill="#b91c1c"/>
+  <g transform="translate(256,240)">
+    <rect x="-80" y="-30" width="160" height="70" rx="12" fill="white"/>
+    <rect x="-70" y="-50" width="40" height="25" rx="6" fill="white"/>
+    <rect x="30" y="-50" width="40" height="25" rx="6" fill="white"/>
+    <circle cx="-50" cy="45" r="20" fill="white"/>
+    <circle cx="50" cy="45" r="20" fill="white"/>
+    <circle cx="-50" cy="45" r="8" fill="#b91c1c"/>
+    <circle cx="50" cy="45" r="8" fill="#b91c1c"/>
+    <rect x="-85" y="-40" width="170" height="4" rx="2" fill="#b91c1c" opacity="0.3"/>
+    <rect x="-85" y="-28" width="170" height="4" rx="2" fill="#b91c1c" opacity="0.3"/>
+    <rect x="-85" y="-16" width="170" height="4" rx="2" fill="#b91c1c" opacity="0.3"/>
+  </g>
+  <text x="256" y="430" text-anchor="middle" font-family="Arial,sans-serif" font-size="40" font-weight="bold" fill="white">Aradhana</text>
+</svg>

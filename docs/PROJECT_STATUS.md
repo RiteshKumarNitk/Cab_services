@@ -268,8 +268,23 @@ The project used **npm** (`package-lock.json`, no CI or deployment config). The 
 | Item | Outcome |
 |---|---|
 | Neon project | Linked to **CarService** (`small-star-85128616`), branch `production`, org `org-holy-glitter-98985798` (`.neon`, git-ignored) |
-| Database | App now uses the CarService Neon DB (`ep-dawn-bird…`, pooled URL as `DATABASE_URL`, direct as `DATABASE_URL_UNPOOLED`). Prisma `directUrl` added for migrations. Both migrations applied (`migrate status`: up to date). The previous DB (`ep-delicate-recipe…`) is no longer referenced; old env files kept as git-ignored `*.backup-2026-10-13`. **No data was copied**: the new DB starts empty (no users, vehicles, CMS content, pricing). |
+| Database | App now uses the CarService Neon DB (`ep-dawn-bird…`, pooled URL as `DATABASE_URL`, direct as `DATABASE_URL_UNPOOLED`). Prisma `directUrl` added for migrations. Both migrations applied (`migrate status`: up to date). The previous DB (`ep-delicate-recipe…`) is no longer referenced; old env files kept as git-ignored `*.backup-2026-10-13`. No data was copied from the old DB. The new DB was then seeded with website content, pricing, fleet and an Indian demo dataset (18 accounts, `*-DEMO-*` records; see README "Demo data and logins"). |
 | Object Storage | Private bucket `assets` declared in `neon.ts` and provisioned. Wired via the Files SDK `neon` adapter (`src/lib/storage.ts`) and `/api/uploads` (upload, plus presigned 5-min reads with ownership checks). Driver expense receipts now upload to storage and store the key. Before this they were saved as base64 data URLs inside `Expense.receiptUrl`. |
 | Neon Auth | Provisioned (`auth: true`), healthy (JWKS and `/ok` verified). **Not wired into login**: the app keeps NextAuth (Auth.js), per the neon-auth skill ("keep a working Auth.js unless asked to migrate"). Migrating would move every account and role, and needs your decision (D9). |
 | Fix found while testing | Auth.js rejected all requests under `next start` (`UntrustedHost`): login was broken in any non-Vercel production run. Fixed with `AUTH_TRUST_HOST=true` in `.env.local`. **Set it in the production host's env too.** |
 | Agent tooling | Neon MCP server (`.mcp.json`, OAuth, no key stored); skills `neon`, `neon-postgres`, `neon-object-storage`, `neon-auth` in `.claude/skills/` |
+
+### Database configuration check (2026-10-13, read-only)
+
+| Check | Result |
+|---|---|
+| `.env` `DATABASE_URL` (pooled, used by app and Prisma Client) | `ep-dawn-bird-b334ztap-pooler.c-4.ap-southeast-1.aws.neon.tech` |
+| `.env` `DATABASE_URL_UNPOOLED` (Prisma `directUrl`, used by Migrate) | `ep-dawn-bird-b334ztap.c-4.ap-southeast-1.aws.neon.tech` |
+| `.env.local` `DATABASE_URL` (Next.js runtime override) | same pooled host |
+| Endpoint ownership (Neon API) | `ep-dawn-bird-b334ztap` → branch `production` (`br-billowing-glade-b3gk5x33`, default) → project CarService `small-star-85128616`, state active |
+| `prisma migrate status` | ✅ "Database schema is up to date!" (2 migrations) |
+| Pooled read-only query | ✅ `_prisma_migrations`: `0_init`, `20261013000000_add_assignment_indexes` |
+| Old host `ep-delicate-recipe…` | Only in the git-ignored `.env.local.backup-2026-10-13`. Not read by Prisma or Next.js. |
+| Persistent Windows `DATABASE_URL` (User/Machine) | none |
+
+A `P1001` against the old host means `DATABASE_URL` is set in that terminal's process environment, which takes precedence over `.env` (Prisma never overrides an existing variable). Check with `echo $env:DATABASE_URL` and clear it with `Remove-Item Env:DATABASE_URL`, or open a new terminal.

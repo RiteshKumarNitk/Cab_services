@@ -2,6 +2,7 @@
   "name": "aradhana-cab",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.27.1",
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
   },
@@ -14,6 +15,8 @@
     "test": "tsx --test \"src/**/__tests__/*.test.ts\"",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:status": "prisma migrate status",
     "prisma:seed": "prisma db seed",
     "prisma:studio": "prisma studio"
   },

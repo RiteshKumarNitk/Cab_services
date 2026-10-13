@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { useBookings, useMarkPaymentPaid } from "@/lib/hooks";
+import { POLL, useBookings, useMarkPaymentPaid } from "@/lib/hooks";
+import { STAFF_ROLES } from "@/lib/authz-roles";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -33,15 +34,23 @@ import {
 } from "@/lib/utils";
 import { CalendarCheck, IndianRupee, Eye, Filter } from "lucide-react";
 
+const PAGE_SIZE = 50;
+
 export default function AdminBookingsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
-  const { data: bookings, isLoading } = useBookings({
-    ...(statusFilter && { status: statusFilter }),
-    ...(typeFilter && { type: typeFilter }),
-  });
+  const [page, setPage] = useState(1);
+  const { data: bookings, isLoading } = useBookings(
+    {
+      ...(statusFilter && { status: statusFilter }),
+      ...(typeFilter && { type: typeFilter }),
+      page: String(page),
+      limit: String(PAGE_SIZE),
+    },
+    { refetchInterval: POLL.list }
+  );
   const markPaymentPaid = useMarkPaymentPaid();
 
   const [selectedBooking, setSelectedBooking] = useState<Record<string, unknown> | null>(null);
@@ -49,7 +58,7 @@ export default function AdminBookingsPage() {
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/admin/login");
-    if (status === "authenticated" && session?.user?.role !== "ADMIN") router.push("/");
+    if (status === "authenticated" && !STAFF_ROLES.includes(session?.user?.role ?? "")) router.push("/");
   }, [session, status, router]);
 
   if (status === "loading" || isLoading) {
@@ -63,7 +72,10 @@ export default function AdminBookingsPage() {
     );
   }
 
-  const bookingsList = Array.isArray(bookings) ? bookings : [];
+  // Paged response: { bookings, total, page, totalPages }
+  const bookingsList = Array.isArray(bookings?.bookings) ? bookings.bookings : [];
+  const totalPages: number = bookings?.totalPages ?? 1;
+  const total: number = bookings?.total ?? 0;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
@@ -80,7 +92,7 @@ export default function AdminBookingsPage() {
           <span className="text-sm text-gray-500">Filters:</span>
         </div>
         <div className="w-44">
-          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value ?? "")}>
+          <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value ?? ""); setPage(1); }}>
             <SelectTrigger className="h-9 rounded-lg border-gray-200">
               <SelectValue placeholder="All Status" />
             </SelectTrigger>
@@ -95,7 +107,7 @@ export default function AdminBookingsPage() {
           </Select>
         </div>
         <div className="w-44">
-          <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value ?? "")}>
+          <Select value={typeFilter} onValueChange={(value) => { setTypeFilter(value ?? ""); setPage(1); }}>
             <SelectTrigger className="h-9 rounded-lg border-gray-200">
               <SelectValue placeholder="All Types" />
             </SelectTrigger>
@@ -196,6 +208,21 @@ export default function AdminBookingsPage() {
                 </tbody>
               </table>
             </div>
+            {total > 0 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm text-gray-500">
+                <span>
+                  Page {page} of {totalPages} &middot; {total} bookings
+                </span>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                    Previous
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>

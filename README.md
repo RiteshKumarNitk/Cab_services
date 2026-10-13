@@ -2,17 +2,24 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+This project uses **pnpm** (version pinned in `package.json` → `packageManager`; enable it with `corepack enable`).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install          # build scripts for Prisma, esbuild, sharp, unrs-resolver are allow-listed in pnpm-workspace.yaml
+pnpm prisma:generate
 pnpm dev
-# or
-bun dev
 ```
+
+Checks: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`.
+
+> pnpm is the only package manager (`package-lock.json` was removed on 2026-10-13). Don't run `npm install`.
+
+### Database migrations
+
+Schema changes go through Prisma Migrate (`prisma/migrations/`, baseline `0_init`).
+
+* Production: `pnpm prisma:status`, then `pnpm prisma:deploy` (applies pending migrations only, never resets).
+* **Warning:** `.env` currently points at the production Neon database. Never run `pnpm prisma:migrate` (`migrate dev`) or `prisma db push` against it: `migrate dev` can offer to reset the database. Use a Neon branch / separate `DATABASE_URL` for development.
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 

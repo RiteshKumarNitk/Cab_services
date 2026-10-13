@@ -5,7 +5,7 @@
 **Requirements:** [PRODUCT_SPECIFICATION.md](PRODUCT_SPECIFICATION.md) (ERP) and [WEBSITE_DESIGN.md](WEBSITE_DESIGN.md) (public website)
 **Related:** [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [TESTING_STATUS.md](TESTING_STATUS.md)
 
-Every status below comes from reading the code. The database could not be reached from the audit machine, so **no workflow has been run end to end against real data**. That means no item is marked `COMPLETE` (verified against acceptance criteria). The best rating a working feature can get here is "implemented (code-verified)". There is no completion percentage, because there is no weighted, runtime-verified inventory to calculate one from.
+Every status below comes from reading the code. The configured database was unreachable in the sandboxed audit run. It is reachable outside the sandbox (the second-session build read CMS data from it), but it may be production (D8), so it was deliberately **not** used for testing. **No workflow has been run end to end against real data.** That means no item is marked `COMPLETE` (verified against acceptance criteria). The best rating a working feature can get here is "implemented (code-verified)". There is no completion percentage, because there is no weighted, runtime-verified inventory to calculate one from.
 
 ---
 
@@ -16,12 +16,13 @@ Every status below comes from reading the code. The database could not be reache
 | Framework | Next.js **16.2.10** (App Router, Turbopack), React 19.2 | `package.json` |
 | Language | TypeScript 5 (strict type-check passes) | `tsconfig.json` |
 | Database | PostgreSQL on Neon, via Prisma **5.22** | `prisma/schema.prisma` (43 models, 17 enums) |
-| Schema management | `prisma db push` style. **There is no `prisma/migrations` directory** | `prisma/` contains only `schema.prisma` and `seed.ts` |
+| Schema management | Prisma Migrate. Baseline `0_init` and an index migration added 2026-10-13; **not yet applied to production** (P1-1) | `prisma/migrations/` |
 | Auth | NextAuth v5 beta (credentials and phone OTP), JWT sessions | `src/lib/auth.ts` |
 | UI | Tailwind 4, shadcn/base-ui, lucide, framer-motion, sonner, recharts | `package.json` |
 | Data fetching | TanStack Query (client), server components with Prisma (server), server actions (CMS) | `src/lib/hooks.ts`, `src/lib/admin-cms.ts` |
 | Validation | `zod` 4 (installed; first used in this session for enquiries and contact) | `src/lib/enquiry-validation.ts` |
-| Tests | None before this session. Now `node:test` through `tsx` | `src/lib/__tests__/` |
+| Tests | `node:test` through `tsx` (46 unit tests) | `src/lib/__tests__/` |
+| Package manager | pnpm 11.27.1 (npm lockfile removed 2026-10-13) | `pnpm-lock.yaml`, `pnpm-workspace.yaml` |
 | CI / deploy config | **None** (no `.github/`, no `vercel.json`, no Dockerfile) | repo root |
 
 Environment variables (names only): `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`. They are in `.env` and `.env.local`, which are git-ignored.
@@ -191,3 +192,73 @@ Status key: `IMPLEMENTED*` means code-verified only, not run against a database 
 | Tests and scripts | `src/lib/__tests__/*.test.ts`, `package.json` (`test`, `typecheck`) |
 
 **API behaviour changes:** `POST /api/bookings` (customer) now returns `{ reference, duplicate, message }` and creates a Lead, not a Booking. Invoice `PATCH` can no longer set `paidAmount`, `paymentStatus` or `paidAt`. Finalize and convert return `200` with the existing record on repeat calls (still `201` on creation). Assigning a driver now requires a vehicle first (spec §8.2). Drivers can no longer cancel bookings (permission matrix: Bookings = R for Driver). No UI in the repo depended on the removed behaviours.
+
+---
+
+## 7. Architecture and performance audit (second pass, 2026-10-13)
+
+Scope: package manager, data-access patterns, request volume, client/server split, module boundaries. All findings come from reading the code. **No query timings or bundle sizes were measured**, because no profiling of a running app against data was possible here. Numbers below are counts from the code or configuration, not runtime measurements.
+
+### Findings
+
+| # | Finding | Evidence | Status |
+|---|---|---|---|
+| A1 | **Aggressive polling of unbounded lists.** `useBookings` refetched the full bookings list every **5 s** and `useBooking` every **3 s** on 9 pages. That included pages whose data only changes through the viewer's own actions: customer bookings/history, driver earnings/expenses/incidents. | `src/lib/hooks.ts` | **Fixed**: polling is opt-in (see below) |
+| A2 | `/api/bookings` returned the full `Vehicle` row (32 columns, including document expiry dates) to customers and drivers. List views read only `name`, `model`, `plateNumber`. | `src/app/api/bookings/route.ts` | **Fixed**: 6-field `select` |
+| A3 | Unbounded `findMany` (no `take`) in 20 API routes, including `/api/bookings`, payments, invoices, expenses, settlements, users, vehicles, dispatch. Payload and query cost grow with history. | grep of `src/app/api` | Open: P3-8 (needs paginated response shape plus UI paging) |
+| A4 | Missing indexes for hot filters: `Booking.vehicleId` and `Booking.pickupDate` (availability overlap check, calendar, dashboard), `Dispatch.vehicleId` / `driverId` (overlap check). `Booking` is indexed only on customer, driver, status, type, createdAt, lead, quotation. | `prisma/schema.prisma` | Open: P3-9. Needs `EXPLAIN` on real data and a migration (P1-1). |
+| A5 | `findAvailableVehicles` / `findAvailableDrivers` are N+1 (about 4 queries per candidate) but currently **unused**. | grep: no callers | Open: delete, or batch, when a "suggest available" UI is built |
+| A6 | 44 of 100 `page.tsx` routes are entirely client components (20 of 48 admin pages); 64 files under `src/app` declare `"use client"`. Several admin list pages fetch on the client what a Server Component could render (e.g. `admin/bookings`, `admin/customers`, `admin/trips`). Oversized components: `(public)/page.tsx` 720 lines, `driver/page.tsx` 628, `admin/quotations/[id]` 587, `admin/finance` 580. | `grep "use client"`, `wc -l` | Open: P3-10, page by page, measured with build output and React profiler |
+| A7 | Business rules still duplicated in places: role arrays declared locally in ~10 routes (same contents as `src/lib/authz-roles.ts`); fare maths in `src/lib/utils.ts` and again in the quotation page. | grep | Open: P3-11 (consolidate when touching each route) |
+| A8 | Route handlers are a mix of thin (dispatch, convert, status: they call services in `src/lib`) and fat (invoices, payments, settlements, leads, quotations contain the business logic inline). | read | Open: P3-11, extract `src/lib/{quotations,finance}` services as each is changed |
+| A9 | Next.js inferred the workspace root from a stray `C:\Users\RiteshKumar\package-lock.json`, widening resolution and file watching to the home directory. | build warning | **Fixed**: `turbopack.root` in `next.config.ts` |
+| A10 | Admin bookings page redirected every role except exactly `ADMIN` (SUPER_ADMIN and ops managers bounced to `/`). | `src/app/admin/bookings/page.tsx` | **Fixed**: `STAFF_ROLES` |
+
+### Request volume change (A1), from configuration, per focused browser tab
+
+TanStack Query pauses interval polling in background tabs by default. Lists still refetch on window focus and after any booking mutation.
+
+| Page | Before | After |
+|---|---|---|
+| Admin → Bookings | 12 req/min | 2 req/min (`POLL.list` 30 s) |
+| Driver dashboard (incoming trips) | 12 req/min | 4 req/min (`POLL.queue` 15 s) |
+| Driver trip page | 20 req/min, always | 6 req/min while the booking is in dispatch or on the trip; **0** once completed or cancelled |
+| Customer bookings, customer history, driver rides, earnings, expenses, incidents | 12 req/min each | 0 (focus and mutation refresh only) |
+
+Each `/api/bookings` request runs one `findMany` plus relation queries for customer, driver, vehicle and rating, over the **whole** history for staff.
+
+### Modular-monolith assessment
+
+One Next.js app and one database remain the right shape. There is no scaling or isolation requirement that would justify splitting services. The domain modules already forming in `src/lib` should be the boundary for each department:
+
+| Department | Module(s) today | Gaps |
+|---|---|---|
+| CRM | `admin-crm.ts`, `enquiries.ts`, `enquiry-validation.ts`, `lead-scoring.ts`, `lead-conversion.ts` | Lead/follow-up logic still inline in routes |
+| Quotations | none (inline in `api/admin/quotations/**`) | Extract with P2-1 |
+| Bookings / lifecycle | `booking-lifecycle.ts`, `customer-timeline.ts` | |
+| Operations / dispatch | `operations-queue.ts`, `vehicle-availability.ts`, `driver-availability.ts` | |
+| Finance | `finance.ts` | Payment/invoice/settlement writes inline in routes |
+| CMS | `cms.ts`, `admin-cms.ts` | |
+| Platform | `auth.ts`, `authz*.ts`, `event-bus.ts`, `notifications.ts`, `audit-logger.ts`, `webhook-dispatcher.ts` | |
+
+A repository layer is **not** recommended. Prisma already is the data-access abstraction, and wrapping simple queries would add indirection without value. Services should take an optional transaction client (`Db`), as the availability checks now do.
+
+### Package manager (Phase 4)
+
+The project used **npm** (`package-lock.json`, no CI or deployment config). The pnpm migration was verified in an isolated copy (details in TESTING_STATUS §6) and applied **additively**:
+* added `pnpm-lock.yaml` (generated by `pnpm import` from `package-lock.json`; all 36 direct dependencies resolve to the same versions)
+* added `pnpm-workspace.yaml` (`allowBuilds` for the six packages with required install scripts: Prisma ×3, esbuild, sharp, unrs-resolver)
+* added `"packageManager": "pnpm@11.27.1"` and pnpm setup notes in the README
+* **kept** `package-lock.json` and the existing npm-installed `node_modules`, pending your review (P1-8)
+
+## 8. Session 3 (2026-10-13)
+
+| Item | Outcome |
+|---|---|
+| pnpm switch (P1-8) | ✅ Done. `package-lock.json` deleted; `node_modules` reinstalled by pnpm; type-check, 46 tests and build pass. `corepack enable` needs admin rights on this machine, but the global pnpm already matches the pinned 11.27.1. |
+| Pagination (P3-8) | ✅ 11 list endpoints accept `page`/`limit`. Legacy callers get the 500 newest rows plus `X-Has-More`. Admin bookings page paginated (50/page). Dispatch board no longer returns every dispatch ever made. |
+| Security fix found on the way | `GET /api/admin/follow-ups` (CRM call notes) only required login. Now CRM roles only. |
+| Fleet fuel page | Fixed the `?type=` vs `?category=` mismatch: it now shows fuel expenses only |
+| Production schema drift | ✅ None (read-only check) |
+| Migrations baseline (P1-1) | Prepared, **not applied** (see TESTING_STATUS §8) |
+| Indexes (P3-9) | 4 indexes measured at 200k rows (7–45 ms → 0.06–0.7 ms), added as a migration, **not applied**. Production currently has 1 booking, so the benefit only appears with growth. |

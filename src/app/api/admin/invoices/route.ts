@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parsePageParams, listResponse } from "@/lib/pagination";
 import { eventBus, createEvent } from "@/lib/event-bus";
 
 import { FINANCE_ROLES, FINANCE_READ_ROLES, hasRole } from "@/lib/authz";
@@ -13,6 +14,7 @@ export async function GET(req: NextRequest) {
   if (!hasRole(session.user.role, READ_ROLES)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
+  const pp = parsePageParams(searchParams);
   const bookingId = searchParams.get("bookingId");
   const customerId = searchParams.get("customerId");
   const status = searchParams.get("status");
@@ -25,6 +27,8 @@ export async function GET(req: NextRequest) {
   const invoices = await prisma.invoice.findMany({
     where,
     orderBy: { createdAt: "desc" },
+    skip: pp.skip,
+    take: pp.take,
     include: {
       booking: { select: { bookingNumber: true } },
       customer: { select: { name: true, email: true, phone: true } },
@@ -32,7 +36,7 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  return NextResponse.json(invoices);
+  return listResponse("invoices", invoices, pp, () => prisma.invoice.count({ where }));
 }
 
 export async function POST(req: NextRequest) {

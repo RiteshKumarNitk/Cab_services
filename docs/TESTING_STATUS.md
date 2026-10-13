@@ -65,3 +65,66 @@ These are the main gaps. The code paths exist and type-check, but have **not bee
 5. Log in as the driver → trip page → Start with a wrong OTP (error toast) → with the right OTP → pickup → drop → complete.
 6. Try registering via the API with `"role":"ADMIN"` → 400.
 7. As a customer, call `GET /api/admin/payments` → 403.
+
+## 6. pnpm migration verification (2026-10-13)
+
+Run in an **isolated copy** of the repo, so the project's npm-installed `node_modules` was not touched. The copy was deleted afterwards.
+
+| Step | Result |
+|---|---|
+| `pnpm import` (from `package-lock.json`) | ✅ 739 packages resolved |
+| `pnpm install --frozen-lockfile` | ✅ installed. pnpm 11 blocks dependency build scripts by default, so they were allow-listed via `pnpm approve-builds` for the six packages that need them. |
+| Direct dependency versions vs npm install | ✅ 36/36 identical |
+| Install scripts and `prisma generate` | ✅. Run with `node` directly: in this tool environment, `cmd.exe` children get an empty PATH, so pnpm (and npm) lifecycle scripts can't find `node`. This is an environment limitation; it also explains the earlier `npm test` shim failure. |
+| `tsc --noEmit` | ✅ |
+| Unit tests | ✅ 39/39 |
+| ESLint | Same as npm: 25 errors / 172 warnings, all pre-existing |
+| `next build` | ✅ exit 0, 139/139 static pages, route table identical to the npm build (149 lines). It must run from a short path: a first attempt in a deeply nested temp directory hit the Windows 260-char path limit in Turbopack chunk names. |
+
+Re-run on your machine before deleting `package-lock.json`: `corepack enable && pnpm install --frozen-lockfile && pnpm typecheck && pnpm test && pnpm build`.
+
+## 7. Second-session results (after the performance changes)
+
+| Check | Result |
+|---|---|
+| Type-check | ✅ |
+| Unit tests | ✅ 39/39 (adds `isLiveBookingStatus`) |
+| Lint | 25 errors / 172 warnings (unchanged, all pre-existing) |
+| `next build` (npm install, with DB access) | ✅ exit 0, and the "inferred your workspace root" warning is gone after `turbopack.root` |
+
+## 8. Session 3 (2026-10-13): pnpm switch, pagination, migrations, indexes
+
+### Checks on the real project (pnpm-installed `node_modules`)
+
+| Check | Result |
+|---|---|
+| `pnpm install --frozen-lockfile` | ✅ 635 packages. The six allow-listed build scripts were run with `node` directly (tool-environment PATH issue, see §6). |
+| Type-check | ✅ |
+| Unit tests | ✅ **46/46** (adds `pagination.test.ts`: param parsing and clamping, legacy array plus `X-Has-More`, paged envelope) |
+| Lint | 25 errors / 172 warnings (unchanged, all pre-existing) |
+| `next build` | ✅ 139/139 static pages. A first attempt failed while Neon was waking from suspend: `/blog/[slug]` `generateStaticParams` cannot reach the DB, which fails the build (P1-5). The retry passed. |
+| Schema drift, prod DB vs `schema.prisma` (read-only `migrate diff --from-schema-datasource`) | ✅ empty diff: production matches the schema exactly |
+| `prisma validate` | ✅ |
+
+### Query-plan measurements (P3-9)
+
+**Production (read-only transaction):** Booking 1 row, Vehicle 9, User 5, Dispatch/Trip/Payment/Invoice 0. Every hot query ran in ≤ 1.1 ms. At this size the planner seq-scans regardless, so production plans cannot show index value.
+
+**At scale:** synthetic copies in session `TEMP` tables on the same Neon Postgres, inside a transaction that was **rolled back** (nothing written to `public`). Data: 200,000 bookings over 3 years, 200 vehicles, 300 drivers, 50,000 customers, about 5% active; 200,000 dispatches, 1,000 undispatched. Existing schema indexes recreated, `ANALYZE`d, warm-cache second run reported. Two runs gave consistent numbers (second run shown):
+
+| Query (code path) | Before | After | Index |
+|---|---|---|---|
+| Q1 vehicle overlap (`checkVehicleAvailability`) | 7.42 ms (bitmap on status only) | 0.50 ms | `Booking(vehicleId, pickupDate)` |
+| Q2 driver overlap (`checkDriverAvailability`) | 0.41 ms | 0.48 ms | none needed: existing `Booking(driverId)` suffices, so `(driverId, pickupDate)` was **not** added |
+| Q3 dispatch overlap, vehicle | 13.17 ms (seq scan) | 0.73 ms | `Dispatch(vehicleId)` |
+| Q3b dispatch overlap, driver | 14.32 ms (seq scan) | 0.57 ms | `Dispatch(driverId)` |
+| Q4 calendar month (`/api/admin/calendar`) | 45.91 ms (seq scan) | 0.60 ms | `Booking(pickupDate)` |
+| Q5 dashboard today (`getOperationsDashboard`) | 29.96 ms (seq scan) | 0.06 ms | `Booking(pickupDate)` |
+
+Limits: synthetic distribution, warm cache, single client, server-side execution time only (no network). The scripts are kept outside the repo.
+
+### Migrations
+
+* `prisma/migrations/0_init` was generated from the schema (`migrate diff --from-empty`): 43 tables, 17 enums, 123 indexes. It matches production (empty drift diff).
+* `prisma/migrations/20261013000000_add_assignment_indexes`: the 4 indexes above.
+* **Not yet applied to production.** `migrate status` reports `0_init` pending. The baseline/deploy step was blocked by the tool's permission policy for production deploys and is left for you to run (IMPLEMENTATION_PLAN P1-1).

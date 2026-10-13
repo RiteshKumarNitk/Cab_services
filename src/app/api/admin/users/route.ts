@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { ADMIN_ROLES, OPS_ROLES, hasRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
+import { parsePageParams, listResponse } from "@/lib/pagination";
 import bcrypt from "bcryptjs";
 import { Role } from "@prisma/client";
 
 export async function GET(req: Request) {
   const session = await auth();
-  const roleFilter = new URL(req.url).searchParams.get("role");
+  const { searchParams } = new URL(req.url);
+  const roleFilter = searchParams.get("role");
+  const pp = parsePageParams(searchParams);
   // Ops managers have read access to the driver list (dispatch board); full user list is admin-only.
   const canRead =
     hasRole(session?.user?.role, ADMIN_ROLES) ||
@@ -17,8 +20,11 @@ export async function GET(req: Request) {
   }
 
   try {
+    const where = roleFilter && roleFilter in Role ? { role: roleFilter as Role } : undefined;
     const users = await prisma.user.findMany({
-      where: roleFilter && roleFilter in Role ? { role: roleFilter as Role } : undefined,
+      where,
+      skip: pp.skip,
+      take: pp.take,
       select: {
         id: true,
         email: true,
@@ -42,7 +48,7 @@ export async function GET(req: Request) {
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json(users);
+    return listResponse("users", users, pp, () => prisma.user.count({ where }));
   } catch (error) {
     console.error("Error fetching users:", error);
     return NextResponse.json(

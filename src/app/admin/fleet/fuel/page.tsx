@@ -42,7 +42,7 @@ export default function AdminFuelPage() {
   const fetchData = async () => {
     try {
       const [entriesRes, vehiclesRes] = await Promise.all([
-        fetch("/api/admin/expenses?type=FUEL"),
+        fetch("/api/admin/expenses?category=FUEL"),
         fetch("/api/admin/vehicles"),
       ]);
       const entriesData = await entriesRes.json();

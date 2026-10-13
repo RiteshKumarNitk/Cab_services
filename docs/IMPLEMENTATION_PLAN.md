@@ -19,7 +19,7 @@ When a dependency forces a different order, the reason is given in the task.
 | **D5** | Remove the "mark paid" button on the bookings list (sets paid without a payment record)? | Finance integrity: money marked received with no transaction | Replace it with "Record payment" (opens the existing dialog) |
 | **D6** | Remove seed credentials from `README.md`, and confirm the seed is never run on production | Default admin password | Yes |
 | **D7** | Are the hard-coded tour prices, ratings, review counts and offers real? | Truthful-claims requirement; one offer has expired | Move them to the CMS, or hide them until verified |
-| **D8** | Is the Neon database in `.env` production? | Determines whether migrations need a maintenance window | Create a separate dev/test database |
+| **D8** | ~~Is the Neon database in `.env` production?~~ **Answered 2026-10-13: yes, production.** | Migrations are applied with `migrate deploy` only. Development needs its own DB (Neon branch). | |
 
 ---
 
@@ -27,13 +27,14 @@ When a dependency forces a different order, the reason is given in the task.
 
 | ID | Task | Acceptance criteria | Validation |
 |---|---|---|---|
-| P1-1 | Baseline Prisma migrations. Generate `prisma/migrations/0_init` from the current schema with `prisma migrate diff --from-empty`, then mark it applied on existing DBs with `migrate resolve --applied`. **Non-destructive; needs D8 first.** | `prisma migrate status` is clean on dev and prod. Future changes go through `migrate dev` / `migrate deploy`. | Run against a copy of prod first |
+| P1-1 | ✅ **Prepared 2026-10-13, apply pending:** `0_init` generated and drift-checked (prod matches); index migration added. Remaining: run `pnpm prisma:deploy` steps in TESTING_STATUS §8 / README. Original task: | P1-1 | Baseline Prisma migrations. Generate `prisma/migrations/0_init` from the current schema with `prisma migrate diff --from-empty`, then mark it applied on existing DBs with `migrate resolve --applied`. **Non-destructive; needs D8 first.** | `prisma migrate status` is clean on dev and prod. Future changes go through `migrate dev` / `migrate deploy`. | Run against a copy of prod first |
 | P1-2 | Separate test database plus DB-backed integration tests for the services in `src/lib` (conversion, dispatch, status, payments) | The tests in the "Integration tests to add" section of TESTING_STATUS.md pass | `npm test` with `DATABASE_URL` pointing at the test DB |
 | P1-3 | CI workflow: install, `typecheck`, `lint`, `test`, `build` | CI is red on any failure | GitHub Actions run on a PR |
 | P1-4 | Fix the 25 pre-existing lint errors (`no-explicit-any` in the CSV export, React 19 hook-purity rules on several pages) | `eslint src` reports 0 errors | `npm run lint` |
 | P1-5 | Build must not cache empty CMS pages: fail the build or skip prerender when the DB is unreachable | No `PrismaClientInitializationError` in build logs on CI with a test DB | `next build` |
 | P1-6 | Move the OTP and auth-token stores into the database (or Redis) | OTP login works across instances and restarts | Integration test |
 | P1-7 | Fix the business timezone at `Asia/Kolkata` for day windows, shift checks and dashboard "today" | Unit tests with UTC host time pass | `TZ=UTC npm test` |
+| P1-8 | ✅ **Done 2026-10-13**: `package-lock.json` removed, real `node_modules` reinstalled with pnpm, all checks pass. Original task: | P1-8 | Finish the npm → pnpm switch: after review, delete `package-lock.json`, reinstall `node_modules` with `pnpm install --frozen-lockfile`, and use pnpm in CI (P1-3) and deployment | `pnpm install --frozen-lockfile && pnpm typecheck && pnpm test && pnpm build` pass on a clean checkout. Only one lockfile in the repo. | Already verified in an isolated copy (TESTING_STATUS §6) |
 
 ## Phase 2: Critical gaps
 
@@ -60,6 +61,10 @@ Remaining:
 | P3-5 | Clean up the driver dashboard and rides list: remove legacy `REQUESTED`/`ACCEPTED`/`STARTED`/`COMPLETED` actions, link to the trip page | No buttons that always fail |
 | P3-6 | Public booking self-service pages (`booking/track`, `edit`, `reschedule`, `cancel`): require login or a signed token; implement reschedule as a request to ops (not a status) | No page posts an invalid status |
 | P3-7 | Reliable event delivery: outbox table and retry for webhooks and notifications (needs P1-1) | A failed webhook is retried with backoff. No duplicate business writes. |
+| P3-8 | ✅ **Done 2026-10-13** for bookings, payments, invoices (admin + customer), settlements, expenses (admin + driver), incidents, users, follow-ups, quotations; dispatch board limited to queue plus running trips; admin bookings page paginated. Vehicles/webhooks deliberately unpaginated (bounded by fleet/config size). Remaining: "load more" UIs for customer/driver lists if they ever exceed 500. Original task: | P3-8 | Paginate unbounded list APIs (`/api/bookings`, payments, invoices, expenses, settlements, users, vehicles): optional `?take=&cursor=`, default cap for staff lists, UI "load more". Keep the array response when no paging params are sent, so existing callers keep working. | No list endpoint returns more than the cap. Driver earnings uses an aggregate endpoint instead of the full list. |
+| P3-9 | ✅ **Done 2026-10-13 (apply pending with P1-1)**: 4 indexes justified by measurement (TESTING_STATUS §8); `Booking(driverId, pickupDate)` rejected (no gain). Original task: | P3-9 | Indexes from real query plans: candidates `Booking(vehicleId, pickupDate)`, `Booking(driverId, pickupDate)`, `Booking(pickupDate)`, `Dispatch(vehicleId)`, `Dispatch(driverId)`. Run `EXPLAIN (ANALYZE, BUFFERS)` on the availability, calendar and dashboard queries before and after (needs P1-1 and a DB copy). | Measured plan or latency improvement recorded in PROJECT_STATUS |
+| P3-10 | Convert read-only admin list pages (`admin/bookings`, `admin/customers`, `admin/trips`) to Server Components with a small client island for filters. Lazy-load recharts on report pages. | First-load JS for those routes reduced, measured from `next build` output or the bundle analyzer |
+| P3-11 | Extract inline route logic into services (`src/lib/quotations.ts`, finance writes into `finance.ts`); replace local role arrays with `authz-roles.ts` | Route handlers only parse, authorize, call a service and map errors |
 
 ## Phase 4: Fleet, drivers, finance
 
@@ -103,4 +108,4 @@ Remaining:
 
 ## Next unfinished task
 
-**P1-1 (migrations baseline), blocked on D8.** Until that is answered, the next safe task that needs no database is **P2-1 (quotation lifecycle validation)**.
+**Apply P1-1 to production** (two commands, README → Database migrations). Then P1-2 (test DB on a Neon branch + integration tests) and P1-3 (CI with pnpm). Until that is answered, the next safe task that needs no database is **P2-1 (quotation lifecycle validation)**.

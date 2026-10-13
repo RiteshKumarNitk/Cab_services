@@ -10,6 +10,7 @@ import {
   parseClock,
   isWithinShift,
   BOOKING_TRANSITIONS,
+  isLiveBookingStatus,
 } from "../booking-lifecycle";
 
 const booking = (status: string, overrides: Partial<{ customerId: string; driverId: string | null }> = {}) => ({
@@ -176,5 +177,16 @@ describe("driver shifts", () => {
     assert.equal(isWithinShift(parseClock("10:00")!, shift), true);
     assert.equal(isWithinShift(parseClock("19:00")!, shift), false);
     assert.equal(isWithinShift(parseClock("19:00")!, { startTime: "bad", endTime: "18:00" }), true);
+  });
+});
+
+describe("client refresh", () => {
+  test("bookings in dispatch or on a trip are live; settled ones are not", () => {
+    for (const s of ["WAITING_ASSIGNMENT", "READY_FOR_DISPATCH", "TRIP_STARTED", "DROP_COMPLETED"]) {
+      assert.equal(isLiveBookingStatus(s), true, s);
+    }
+    for (const s of ["TRIP_COMPLETED", "INVOICE_GENERATED", "CLOSED", "CANCELLED", "QUOTE_SENT", "", undefined, null]) {
+      assert.equal(isLiveBookingStatus(s as string), false, String(s));
+    }
   });
 });

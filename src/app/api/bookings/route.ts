@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parsePageParams, listResponse } from "@/lib/pagination";
 import { BookingStatus, BookingType } from "@prisma/client";
 import { enquirySchema, fieldErrors } from "@/lib/enquiry-validation";
 import { createEnquiryLead } from "@/lib/enquiries";
@@ -15,6 +16,7 @@ export async function GET(req: Request) {
   const status = searchParams.get("status");
   const type = searchParams.get("type");
   const role = session.user.role;
+  const pp = parsePageParams(searchParams);
 
   try {
     const where: Record<string, unknown> = {};
@@ -34,16 +36,19 @@ export async function GET(req: Request) {
 
     const bookings = await prisma.booking.findMany({
       where,
+      skip: pp.skip,
+      take: pp.take,
       include: {
         customer: { select: { id: true, name: true, phone: true } },
         driver: { select: { id: true, name: true, phone: true } },
-        vehicle: true,
+        // List views only show these; the full row carries document expiries etc.
+        vehicle: { select: { id: true, name: true, model: true, plateNumber: true, type: true, color: true } },
         rating: true,
       },
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json(bookings);
+    return listResponse("bookings", bookings, pp, () => prisma.booking.count({ where }));
   } catch (error) {
     console.error("Error fetching bookings:", error);
     return NextResponse.json(

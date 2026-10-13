@@ -563,6 +563,10 @@ model Booking {
   @@index([createdAt])
   @@index([leadId])
   @@index([quotationId])
+  // Measured 2026-10-13 on 200k synthetic rows (docs/TESTING_STATUS.md §8):
+  // vehicle overlap check 7.4ms -> 0.5ms; calendar month 45.9ms -> 0.6ms; dashboard "today" 30ms -> 0.06ms
+  @@index([vehicleId, pickupDate])
+  @@index([pickupDate])
 }
 
 model Trip {
@@ -642,6 +646,9 @@ model Dispatch {
   updatedAt           DateTime      @updatedAt
 
   @@index([status])
+  // Undispatched-assignment overlap checks: 13-14ms -> 0.6-0.7ms at 200k rows
+  @@index([vehicleId])
+  @@index([driverId])
 }
 
 model DriverLeave {

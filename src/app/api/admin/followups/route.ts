@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parsePageParams, listResponse } from "@/lib/pagination";
 import { calculateLeadScore } from "@/lib/lead-scoring";
 
 const MANAGER_ROLES = ["SUPER_ADMIN", "ADMIN", "BOOKING_MANAGER", "SUPPORT_EXECUTIVE"];
@@ -8,8 +9,11 @@ const MANAGER_ROLES = ["SUPER_ADMIN", "ADMIN", "BOOKING_MANAGER", "SUPPORT_EXECU
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Follow-ups contain CRM call notes: CRM staff only (previously any logged-in user).
+  if (!MANAGER_ROLES.includes(session.user.role ?? "")) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
+  const pp = parsePageParams(searchParams);
   const leadId = searchParams.get("leadId");
   const bookingId = searchParams.get("bookingId");
   const userId = searchParams.get("userId");
@@ -22,13 +26,15 @@ export async function GET(req: NextRequest) {
   const followUps = await prisma.followUp.findMany({
     where,
     orderBy: { createdAt: "desc" },
+    skip: pp.skip,
+    take: pp.take,
     include: {
       user: { select: { id: true, name: true } },
       lead: { select: { id: true, name: true, leadScore: true, status: true } },
     },
   });
 
-  return NextResponse.json(followUps);
+  return listResponse("followUps", followUps, pp, () => prisma.followUp.count({ where }));
 }
 
 export async function POST(req: NextRequest) {

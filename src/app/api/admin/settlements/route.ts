@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parsePageParams, listResponse } from "@/lib/pagination";
 
 import { FINANCE_ROLES, FINANCE_READ_ROLES, hasRole } from "@/lib/authz";
 
@@ -12,6 +13,7 @@ export async function GET(req: NextRequest) {
   if (!hasRole(session.user.role, READ_ROLES)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
+  const pp = parsePageParams(searchParams);
   const driverId = searchParams.get("driverId");
   const status = searchParams.get("status");
   const from = searchParams.get("from");
@@ -30,13 +32,15 @@ export async function GET(req: NextRequest) {
   const settlements = await prisma.settlement.findMany({
     where,
     orderBy: { createdAt: "desc" },
+    skip: pp.skip,
+    take: pp.take,
     include: {
       driver: { select: { name: true, email: true, phone: true } },
       trip: { select: { id: true, status: true } },
     },
   });
 
-  return NextResponse.json(settlements);
+  return listResponse("settlements", settlements, pp, () => prisma.settlement.count({ where }));
 }
 
 export async function POST(req: NextRequest) {

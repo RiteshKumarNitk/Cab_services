@@ -1,11 +1,20 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
+import { isLiveBookingStatus } from "./booking-lifecycle";
 
 // --------------- Bookings ---------------
-export function useBookings(filters?: Record<string, string>) {
+// Polling is opt-in. Lists still refresh on window focus and after any booking
+// mutation (mutations invalidate ["bookings"]), so only pages that must notice
+// changes made by *other* users (ops board, driver's incoming trips) poll.
+export const POLL = { live: 10_000, queue: 15_000, list: 30_000 } as const;
+
+export function useBookings(
+  filters?: Record<string, string>,
+  options: { refetchInterval?: number | false } = {}
+) {
   const params = filters ? new URLSearchParams(filters).toString() : "";
   return useQuery({
     queryKey: ["bookings", filters],
@@ -13,7 +22,8 @@ export function useBookings(filters?: Record<string, string>) {
       fetch(`/api/bookings${params ? `?${params}` : ""}`).then((res) =>
         res.json()
       ),
-    refetchInterval: 5000,
+    refetchInterval: options.refetchInterval ?? false,
+    placeholderData: keepPreviousData, // no loading flash when filters or page change
   });
 }
 
@@ -22,7 +32,11 @@ export function useBooking(id: string) {
     queryKey: ["booking", id],
     queryFn: () => fetch(`/api/bookings/${id}`).then((res) => res.json()),
     enabled: !!id,
-    refetchInterval: 3000,
+    // Poll only while the booking is in motion; completed/cancelled bookings don't change.
+    refetchInterval: (query) =>
+      isLiveBookingStatus((query.state.data as { status?: string } | undefined)?.status)
+        ? POLL.live
+        : false,
   });
 }
 

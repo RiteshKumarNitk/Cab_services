@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { FINANCE_READ_ROLES, hasRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
+import { parsePageParams, listResponse } from "@/lib/pagination";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -11,11 +12,15 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const customerOnly = searchParams.get("customerOnly") === "true";
+  const pp = parsePageParams(searchParams);
 
   try {
     if (session.user.role === "CUSTOMER" && customerOnly) {
+      const where = { customerId: session.user.id };
       const invoices = await prisma.invoice.findMany({
-        where: { customerId: session.user.id },
+        where,
+        skip: pp.skip,
+        take: pp.take,
         include: {
           booking: {
             select: {
@@ -29,11 +34,13 @@ export async function GET(req: Request) {
         },
         orderBy: { createdAt: "desc" },
       });
-      return NextResponse.json(invoices);
+      return listResponse("invoices", invoices, pp, () => prisma.invoice.count({ where }));
     }
 
     if (hasRole(session.user.role, FINANCE_READ_ROLES)) {
       const invoices = await prisma.invoice.findMany({
+        skip: pp.skip,
+        take: pp.take,
         include: {
           booking: {
             select: { id: true, bookingNumber: true, pickupAddress: true },
@@ -42,7 +49,7 @@ export async function GET(req: Request) {
         },
         orderBy: { createdAt: "desc" },
       });
-      return NextResponse.json(invoices);
+      return listResponse("invoices", invoices, pp, () => prisma.invoice.count());
     }
 
     return NextResponse.json([]);

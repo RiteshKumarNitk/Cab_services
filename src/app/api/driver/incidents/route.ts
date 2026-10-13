@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parsePageParams, listResponse } from "@/lib/pagination";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -41,15 +42,19 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user?.id || session.user.role !== "DRIVER") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    const pp = parsePageParams(new URL(req.url).searchParams);
+    const where = { driverId: session.user.id };
     const incidents = await prisma.incident.findMany({
-      where: { driverId: session.user.id },
+      where,
+      skip: pp.skip,
+      take: pp.take,
       include: {
         trip: { select: { tripNumber: true } },
         booking: { select: { bookingNumber: true } },
@@ -57,7 +62,7 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json(incidents);
+    return listResponse("incidents", incidents, pp, () => prisma.incident.count({ where }));
   } catch (error) {
     console.error("Error fetching incidents:", error);
     return NextResponse.json(

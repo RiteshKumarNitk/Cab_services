@@ -186,3 +186,10 @@ export function isWithinShift(pickupMinutes: number, shift: { startTime: string;
   return pickupMinutes >= start && pickupMinutes <= end;
 }
 
+
+// ---------- Client refresh ----------
+
+/** Booking changes without the viewer acting (dispatch, trip progress): worth polling. */
+export function isLiveBookingStatus(status: string | undefined | null): boolean {
+  return !!status && ACTIVE_ASSIGNMENT_STATUSES.includes(status);
+}

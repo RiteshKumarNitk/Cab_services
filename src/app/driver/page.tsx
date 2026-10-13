@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
-import { useBookings, useUpdateBookingStatus, useUpdateDriverLocation } from "@/lib/hooks";
+import { POLL, useBookings, useUpdateBookingStatus, useUpdateDriverLocation } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -39,7 +39,8 @@ import { toast } from "sonner";
 export default function DriverDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const { data: bookings, isLoading } = useBookings();
+  // Polls so newly dispatched trips appear without a manual refresh.
+  const { data: bookings, isLoading } = useBookings(undefined, { refetchInterval: POLL.queue });
   const updateStatus = useUpdateBookingStatus();
   const updateLocation = useUpdateDriverLocation();
   const [isOnline, setIsOnline] = useState(false);

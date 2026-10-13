@@ -15,7 +15,7 @@ src/app/
   api/             Route handlers (JSON APIs used by client components)
 src/lib/           Domain services, auth, event bus, CMS data access
 src/proxy.ts       Request gate (Next 16 "proxy", formerly middleware): page-level role routing
-prisma/            schema.prisma (no migrations yet, see plan P1-1), seed.ts
+prisma/            schema.prisma (migrations in prisma/migrations), seed.ts
 ```
 
 Data access styles in use (all three talk to the same Prisma client):
@@ -92,6 +92,36 @@ Limitations: delivery is fire-and-forget in the request process, with no retry o
 * Bookings store `pickupDate` (DateTime) and `pickupTime` ("HH:MM") separately and have no end time, which is why assignment windows are whole days.
 * `User.email` is required and unique, so phone-only customers get a placeholder `customer_<digits>@aradhanatravel.com`.
 * Several "status" columns are free strings (`Settlement.status`, `VehicleMaintenance.status`, `DriverLeave.status`, `Payment.type`, `Expense.category`). The API layer validates the allowed values.
+
+## 5a. Client data refresh policy
+
+TanStack Query in `src/lib/hooks.ts`. Polling is **opt-in**: lists refresh on window focus and after mutations (which invalidate `["bookings"]`/`["booking"]`). Only screens that must see other users' changes poll, using the shared intervals in `POLL`:
+
+| Interval | Used by |
+|---|---|
+| `POLL.live` 10 s | Booking detail, only while `isLiveBookingStatus()` (dispatch or trip in progress) |
+| `POLL.queue` 15 s | Driver dashboard (newly dispatched trips) |
+| `POLL.list` 30 s | Admin bookings list |
+
+Don't add polling to history, earnings or settings-style pages.
+
+## 5b. Tooling
+
+* Package manager: **pnpm** (`packageManager` in `package.json`; `pnpm-workspace.yaml` allow-lists the install scripts of `/client`, `/engines`, `prisma`, `esbuild`, `sharp`, `unrs-resolver`). `package-lock.json` remains until the migration is reviewed (P1-8).
+* `next.config.ts` pins `turbopack.root` to the project directory.
+
+## 5c. List endpoints and pagination
+
+`src/lib/pagination.ts`, same convention as `/api/admin/leads` and `/api/admin/trips`:
+
+* `?page=N&limit=M` (limit capped at 200) returns `{ <items>, total, page, limit, totalPages }`
+* with no paging params the endpoint returns a plain array (backward compatible), capped at the 500 newest rows; `X-Has-More: true` marks truncation
+
+New list UIs should use paged mode (see `admin/bookings`).
+
+## 5d. Schema migrations
+
+Prisma Migrate, `prisma/migrations/` (baseline `0_init` plus incremental migrations). `.env` points at **production**: use `prisma migrate deploy` there, never `migrate dev` or `db push`. Index changes must be justified by measured plans (TESTING_STATUS §8).
 
 ## 6. Configuration
 

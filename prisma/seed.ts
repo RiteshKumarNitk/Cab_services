@@ -1,16 +1,65 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type Role, type User, type VehicleType } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { randomBytes, randomInt } from "node:crypto";
+
+// Seed: business content (website settings, CMS, fleet, pricing) plus an Indian demo dataset
+// (staff for every role, drivers, customers and bookings across the whole lifecycle).
+//
+// Safe to re-run: content is upserted, accounts are created only if missing (existing
+// passwords are never reset), and the demo pipeline is skipped once its marker lead exists.
+//
+// Passwords are random per account and printed ONCE at the end of the run, never stored in
+// the repo. Set SEED_PASSWORD to use one known password for all NEW accounts (local dev only).
+//
+// Demo records use "DEMO" numbers (LD-DEMO-*, BK-DEMO-*, ...) and @aradhana.example /
+// @example.com addresses so they are easy to recognise and remove.
 
 const prisma = new PrismaClient();
 
-async function generateBookingNumber(): Promise<string> {
-  const count = await prisma.booking.count();
-  return `BK-${String(count + 1).padStart(5, "0")}`;
+const DEMO_MARKER_LEAD = "LD-DEMO-001";
+const day = 86_400_000;
+
+/** Date `days` from today at hh:mm local time. */
+function at(days: number, hh = 10, mm = 0): Date {
+  const d = new Date(Date.now() + days * day);
+  d.setHours(hh, mm, 0, 0);
+  return d;
 }
 
-async function generateLeadNumber(): Promise<string> {
-  const count = await prisma.lead.count();
-  return `LD-${String(count + 1).padStart(5, "0")}`;
+function newPassword(): string {
+  if (process.env.SEED_PASSWORD) return process.env.SEED_PASSWORD;
+  // 16 chars from base64url plus a guaranteed digit and symbol.
+  return `${randomBytes(12).toString("base64url")}${randomInt(10)}!`;
+}
+
+type Credential = { role: Role; name: string; email: string; phone: string; password: string };
+const credentials: Credential[] = [];
+
+async function account(input: {
+  email: string; name: string; phone: string; role: Role; organizationId?: string; branchId?: string;
+}): Promise<User> {
+  const existing = await prisma.user.findUnique({ where: { email: input.email } });
+  if (existing) return existing;
+  const password = newPassword();
+  const user = await prisma.user.create({
+    data: { ...input, passwordHash: await bcrypt.hash(password, 12) },
+  });
+  credentials.push({ role: input.role, name: input.name, email: input.email, phone: input.phone, password });
+  return user;
+}
+
+/** Fare breakdown in INR (5% GST, as configured on the pricing page). */
+function fare(km: number, perKm: number, extras: { driverAllowance?: number; toll?: number; parking?: number; permit?: number; night?: number; discount?: number } = {}) {
+  const baseFare = Math.round(km * perKm);
+  const driverAllowance = extras.driverAllowance ?? 0;
+  const tollCharges = extras.toll ?? 0;
+  const parkingCharges = extras.parking ?? 0;
+  const permitCharges = extras.permit ?? 0;
+  const nightCharges = extras.night ?? 0;
+  const discount = extras.discount ?? 0;
+  const subtotal = baseFare + driverAllowance + tollCharges + parkingCharges + permitCharges + nightCharges - discount;
+  const gst = Math.round(subtotal * 0.05);
+  return { baseFare, perKmCharge: perKm, totalKm: km, driverAllowance, tollCharges, parkingCharges, permitCharges, nightCharges, discount, gst, totalFare: subtotal + gst, subtotal };
 }
 
 async function main() {
@@ -32,7 +81,7 @@ async function main() {
       email: "info@aradhanatravel.com",
     },
   });
-  console.log("Created organization:", org.name);
+  console.log("Organization:", org.name);
 
   const branch = await prisma.branch.upsert({
     where: { slug: "jaipur-head-office" },
@@ -49,176 +98,351 @@ async function main() {
       email: "jaipur@aradhanatravel.com",
     },
   });
-  console.log("Created branch:", branch.name);
+  console.log("Branch:", branch.name);
 
-  // Create admin user
-  const adminPassword = await bcrypt.hash("admin123", 12);
-  const admin = await prisma.user.upsert({
-    where: { email: "admin@aradhana.com" },
-    update: {},
-    create: {
-      email: "admin@aradhana.com",
-      passwordHash: adminPassword,
-      name: "Aradhana Admin",
-      phone: "08069247178",
-      role: "ADMIN",
-      organizationId: org.id,
-      branchId: branch.id,
-    },
-  });
-  console.log("Created admin user:", admin.email);
+  await seedContent();
+  const people = await seedAccounts(org.id, branch.id);
+  await prisma.branch.update({ where: { id: branch.id }, data: { managerId: people.staff.admin.id } });
+  const fleet = await seedOperationalFleet(people.drivers);
+  await seedDemoPipeline(branch.id, people, fleet);
 
-  // Update branch manager
-  await prisma.branch.update({
-    where: { id: branch.id },
-    data: { managerId: admin.id },
-  });
+  console.log("\n✅ Seed completed!");
+  printCredentials();
+}
 
-  // Create sample driver
-  const driverPassword = await bcrypt.hash("driver123", 12);
-  const driver = await prisma.user.upsert({
-    where: { email: "driver@aradhana.com" },
-    update: {},
-    create: {
-      email: "driver@aradhana.com",
-      passwordHash: driverPassword,
-      name: "Rahul Sharma",
-      phone: "9876543210",
-      role: "DRIVER",
-      organizationId: org.id,
-      branchId: branch.id,
-    },
-  });
+// =====================================================================================
+// Accounts
+// =====================================================================================
 
-  // Create driver status
-  await prisma.driverStatus.upsert({
-    where: { driverId: driver.id },
-    update: {},
-    create: {
-      driverId: driver.id,
-      online: false,
-    },
-  });
-  console.log("Created driver user:", driver.email);
+async function seedAccounts(organizationId: string, branchId: string) {
+  const staffAccount = (email: string, name: string, phone: string, role: Role) =>
+    account({ email, name, phone, role, organizationId, branchId });
 
-  // Create sample customer
-  const customerPassword = await bcrypt.hash("customer123", 12);
-  const customer = await prisma.user.upsert({
-    where: { email: "customer@aradhana.com" },
-    update: {},
-    create: {
-      email: "customer@aradhana.com",
-      passwordHash: customerPassword,
-      name: "Priya Patel",
-      phone: "9876543211",
-      role: "CUSTOMER",
-    },
-  });
-  console.log("Created customer user:", customer.email);
+  const staff = {
+    superAdmin: await staffAccount("superadmin@aradhana.example", "Ritesh Kumar", "+919829000101", "SUPER_ADMIN"),
+    admin: await staffAccount("admin@aradhana.example", "Anil Mathur", "+919829000102", "ADMIN"),
+    opsManager: await staffAccount("ops@aradhana.example", "Deepak Joshi", "+919829000103", "BOOKING_MANAGER"),
+    salesExec: await staffAccount("sales@aradhana.example", "Kavita Sharma", "+919829000104", "SUPPORT_EXECUTIVE"),
+    fleetManager: await staffAccount("fleet@aradhana.example", "Manoj Yadav", "+919829000105", "FLEET_MANAGER"),
+    driverManager: await staffAccount("drivers@aradhana.example", "Harish Choudhary", "+919829000106", "DRIVER_MANAGER"),
+    finance: await staffAccount("finance@aradhana.example", "Pooja Jain", "+919829000107", "FINANCE"),
+    content: await staffAccount("content@aradhana.example", "Neha Kapoor", "+919829000108", "CONTENT_MANAGER"),
+  };
 
-  // ====== SAMPLE LEAD ======
-  const leadNumber = await generateLeadNumber();
-  const lead = await prisma.lead.create({
-    data: {
-      leadNumber,
-      status: "NEW",
-      source: "WEBSITE",
-      name: "Amit Verma",
-      email: "amit@example.com",
-      phone: "9876543212",
-      city: "Jaipur",
-      bookingType: "OUTSTATION",
-      tripType: "ROUND_TRIP",
-      pickupAddress: "Jaipur Airport",
-      dropAddress: "Udaipur City Palace",
-      pickupDate: new Date(Date.now() + 7 * 86400000),
-      passengers: 2,
-      preferredVehicle: "SUV",
-      notes: "Interested in a round trip to Udaipur. Needs pickup from airport.",
-      assignedToId: admin.id,
-      branchId: branch.id,
-    },
-  });
-  console.log("Created sample lead:", lead.leadNumber);
-
-  // Create sample booking
-  const bookingNumber = await generateBookingNumber();
-
-  // Create vehicles
-  const vehicles = [
-    {
-      plateNumber: "RJ-14-XX-1001",
-      model: "Toyota Etios",
-      color: "White",
-      seats: 4,
-      luggage: 2,
-      type: "SEDAN" as const,
-      driverId: driver.id,
-    },
-    {
-      plateNumber: "RJ-14-XX-1002",
-      model: "Honda City",
-      color: "Silver",
-      seats: 4,
-      luggage: 2,
-      type: "SEDAN" as const,
-      driverId: null,
-    },
-    {
-      plateNumber: "RJ-14-XX-2001",
-      model: "Toyota Innova",
-      color: "White",
-      seats: 7,
-      luggage: 4,
-      type: "SUV" as const,
-      driverId: null,
-    },
-    {
-      plateNumber: "RJ-14-XX-2002",
-      model: "Mahindra Scorpio",
-      color: "Black",
-      seats: 7,
-      luggage: 4,
-      type: "SUV" as const,
-      driverId: null,
-    },
+  const driverData = [
+    { email: "suresh.kumar@aradhana.example", name: "Suresh Kumar", phone: "+919829000201", license: "RJ14 20150012345", years: 11, address: "Jhotwara, Jaipur", languages: "Hindi, Rajasthani, English" },
+    { email: "ramesh.meena@aradhana.example", name: "Ramesh Meena", phone: "+919829000202", license: "RJ14 20170023456", years: 8, address: "Sanganer, Jaipur", languages: "Hindi, Rajasthani" },
+    { email: "mahendra.shekhawat@aradhana.example", name: "Mahendra Singh Shekhawat", phone: "+919829000203", license: "RJ23 20120034567", years: 14, address: "Sikar Road, Jaipur", languages: "Hindi, Rajasthani, English" },
+    { email: "abdul.rashid@aradhana.example", name: "Abdul Rashid", phone: "+919829000204", license: "RJ14 20160045678", years: 9, address: "Ramganj, Jaipur", languages: "Hindi, Urdu, English" },
   ];
+  const drivers: User[] = [];
+  for (const d of driverData) {
+    const user = await account({ email: d.email, name: d.name, phone: d.phone, role: "DRIVER", organizationId, branchId });
+    await prisma.driverStatus.upsert({ where: { driverId: user.id }, update: {}, create: { driverId: user.id, online: false } });
+    await prisma.cabDriverProfile.upsert({
+      where: { driverId: user.id },
+      update: {},
+      create: {
+        driverId: user.id, licenseNumber: d.license, licenseExpiry: at(900), address: d.address, city: "Jaipur",
+        state: "Rajasthan", zipCode: "302012", backgroundCheck: true, experienceYears: d.years, languagesSpoken: d.languages,
+      },
+    });
+    drivers.push(user);
+  }
 
+  const customerData = [
+    { email: "rajesh.sharma@example.com", name: "Rajesh Sharma", phone: "+919414000301" },
+    { email: "priya.singh@example.com", name: "Priya Singh", phone: "+919414000302" },
+    { email: "vikram.rathore@example.com", name: "Vikram Singh Rathore", phone: "+919414000303" },
+    { email: "anita.gupta@example.com", name: "Anita Gupta", phone: "+919810000304" },
+    { email: "mohammed.irfan@example.com", name: "Mohammed Irfan", phone: "+919414000305" },
+    { email: "sneha.agarwal@example.com", name: "Sneha Agarwal", phone: "+919414000306" },
+  ];
+  const customers: User[] = [];
+  for (const c of customerData) customers.push(await account({ ...c, role: "CUSTOMER" }));
+
+  console.log(`Accounts: ${Object.keys(staff).length} staff, ${drivers.length} drivers, ${customers.length} customers (${credentials.length} new)`);
+  return { staff, drivers, customers };
+}
+
+// =====================================================================================
+// Operational fleet (vehicles that get assigned to bookings)
+// =====================================================================================
+
+async function seedOperationalFleet(drivers: User[]) {
+  const vehicles: Array<{ plateNumber: string; name: string; model: string; color: string; seats: number; luggage: number; type: VehicleType; pricePerKm: number; driverId: string; insuranceExpiry: Date }> = [
+    { plateNumber: "RJ-14-XX-1001", name: "Toyota Etios", model: "Toyota Etios", color: "White", seats: 4, luggage: 2, type: "SEDAN", pricePerKm: 11, driverId: drivers[3].id, insuranceExpiry: at(240) },
+    { plateNumber: "RJ-14-XX-1002", name: "Honda City", model: "Honda City", color: "Silver", seats: 4, luggage: 2, type: "SEDAN", pricePerKm: 12, driverId: drivers[1].id, insuranceExpiry: at(300) },
+    { plateNumber: "RJ-14-XX-2001", name: "Toyota Innova Crysta", model: "Toyota Innova Crysta", color: "White", seats: 7, luggage: 4, type: "SUV", pricePerKm: 14, driverId: drivers[0].id, insuranceExpiry: at(180) },
+    // Insurance due in 10 days: shows up in document-expiry checks.
+    { plateNumber: "RJ-14-XX-2002", name: "Mahindra Scorpio", model: "Mahindra Scorpio", color: "Black", seats: 7, luggage: 4, type: "SUV", pricePerKm: 14, driverId: drivers[2].id, insuranceExpiry: at(10) },
+  ];
+  const byPlate: Record<string, string> = {};
   for (const v of vehicles) {
-    await prisma.vehicle.upsert({
+    const row = await prisma.vehicle.upsert({
       where: { plateNumber: v.plateNumber },
       update: {},
-      create: v,
+      create: { ...v, fitnessExpiry: at(400), permitExpiry: at(200), rcExpiry: at(1500), ac: true, fuelType: "DIESEL", transmission: "MANUAL" },
     });
+    byPlate[v.plateNumber] = row.id;
   }
-  console.log("Created vehicles");
+  console.log("Operational vehicles:", Object.keys(byPlate).join(", "));
+  return {
+    etios: byPlate["RJ-14-XX-1001"], city: byPlate["RJ-14-XX-1002"],
+    innova: byPlate["RJ-14-XX-2001"], scorpio: byPlate["RJ-14-XX-2002"],
+  };
+}
 
-  // Create a sample completed booking for demo
-  const sampleBooking = await prisma.booking.create({
+// =====================================================================================
+// Demo pipeline: Lead -> Quotation -> Booking -> Dispatch -> Trip -> Invoice -> Payment
+// =====================================================================================
+
+type People = Awaited<ReturnType<typeof seedAccounts>>;
+type Fleet = Awaited<ReturnType<typeof seedOperationalFleet>>;
+
+async function seedDemoPipeline(branchId: string, people: People, fleet: Fleet) {
+  if (await prisma.lead.findUnique({ where: { leadNumber: DEMO_MARKER_LEAD } })) {
+    console.log("Demo pipeline already present; skipping.");
+    return;
+  }
+  const { staff, drivers, customers } = people;
+  const [suresh, ramesh, mahendra, abdul] = drivers;
+  const [rajesh, priya, vikram, anita, irfan, sneha] = customers;
+
+  // ---------- Leads that have not converted yet ----------
+  await prisma.lead.create({
     data: {
-      bookingNumber,
-      leadId: lead.id,
-      customerId: customer.id,
-      driverId: driver.id,
-      bookingType: "LOCAL",
-      tripType: "ONE_WAY",
-      pickupAddress: "Jaipur Railway Station",
-      dropAddress: "Hawa Mahal, Jaipur",
-      pickupDate: new Date(),
-      pickupTime: "10:00",
-      totalFare: 250,
-      baseFare: 250,
-      billableKm: 10,
-      distance: 8.5,
-      duration: 20,
-      status: "COMPLETED",
-      paymentStatus: "PAID",
-      paymentMethod: "CASH",
-      branchId: branch.id,
+      leadNumber: DEMO_MARKER_LEAD, status: "NEW", source: "WEBSITE", name: "Amit Verma", email: "amit.verma@example.com",
+      phone: "+919414000401", city: "Jaipur", bookingType: "OUTSTATION", tripType: "ROUND_TRIP",
+      pickupAddress: "Jaipur International Airport, Sanganer", dropAddress: "City Palace, Udaipur",
+      pickupDate: at(9, 7), returnDate: at(12, 18), passengers: 4, preferredVehicle: "SUV",
+      notes: "Family trip to Udaipur, needs airport pickup.", branchId,
     },
   });
-  console.log("Created sample booking:", sampleBooking.bookingNumber);
 
+  const karan = await prisma.lead.create({
+    data: {
+      leadNumber: "LD-DEMO-002", status: "CONTACTED", source: "PHONE", name: "Karan Mehta", email: "karan.mehta@example.com",
+      phone: "+919414000402", city: "Jaipur", bookingType: "OUTSTATION", tripType: "ROUND_TRIP",
+      pickupAddress: "Vaishali Nagar, Jaipur", dropAddress: "Ranthambore National Park, Sawai Madhopur",
+      pickupDate: at(14, 6), returnDate: at(15, 20), passengers: 5, preferredVehicle: "SUV", leadScore: 7,
+      notes: "Wildlife safari weekend. Comparing prices.", assignedToId: staff.salesExec.id, branchId,
+    },
+  });
+  await prisma.followUp.create({
+    data: {
+      leadId: karan.id, userId: staff.salesExec.id, type: "CALL", outcome: "INTERESTED", nextAction: "SEND_QUOTE",
+      leadScore: 7, duration: 240, notes: "Wants Innova for 5 people. Will confirm dates with family.", reminderAt: at(1, 11),
+    },
+  });
+
+  const snehaLead = await prisma.lead.create({
+    data: {
+      leadNumber: "LD-DEMO-003", status: "QUOTATION_SENT", source: "WEBSITE", name: sneha.name, email: sneha.email,
+      phone: sneha.phone, city: "Jaipur", bookingType: "OUTSTATION", tripType: "ROUND_TRIP",
+      pickupAddress: "Vaishali Nagar, Jaipur", dropAddress: "Brahma Temple, Pushkar", pickupDate: at(6, 8), returnDate: at(6, 21),
+      passengers: 3, preferredVehicle: "SEDAN", leadScore: 8, assignedToId: staff.salesExec.id, branchId,
+    },
+  });
+  const snehaFare = fare(300, 12, { driverAllowance: 300, toll: 260 });
+  await prisma.quotation.create({
+    data: {
+      quotationNumber: "QT-DEMO-003", leadId: snehaLead.id, status: "SENT", validUntil: at(5), bookingType: "OUTSTATION", tripType: "ROUND_TRIP",
+      pickupAddress: snehaLead.pickupAddress, dropAddress: snehaLead.dropAddress, pickupDate: snehaLead.pickupDate, returnDate: snehaLead.returnDate,
+      passengers: 3, vehicleType: "SEDAN", ...omitSubtotal(snehaFare), createdById: staff.salesExec.id, branchId,
+      notes: "Ajmer Sharif and Pushkar day trip, Honda City.",
+    },
+  });
+  await prisma.followUp.create({
+    data: {
+      leadId: snehaLead.id, userId: staff.salesExec.id, type: "WHATSAPP", outcome: "FOLLOW_UP", nextAction: "SCHEDULE_CALL",
+      leadScore: 8, notes: `Quotation QT-DEMO-003 sent on WhatsApp (₹${snehaFare.totalFare}).`, reminderAt: at(2, 12),
+    },
+  });
+
+  // ---------- Converted bookings across the operations lifecycle ----------
+  type Stage = {
+    n: number; customer: User; source: string; bookingType: "LOCAL" | "OUTSTATION" | "AIRPORT"; tripType: "ONE_WAY" | "ROUND_TRIP";
+    pickup: string; drop: string; pickupDate: Date; returnDate?: Date; passengers: number; vehicleType: VehicleType;
+    f: ReturnType<typeof fare>; status: string; vehicleId?: string; driverId?: string;
+  };
+  const stages: Stage[] = [
+    // Awaiting assignment (Dispatch board: Awaiting lane)
+    { n: 4, customer: priya, source: "WEBSITE", bookingType: "OUTSTATION", tripType: "ONE_WAY", pickup: "Malviya Nagar, Jaipur", drop: "Connaught Place, New Delhi",
+      pickupDate: at(3, 6, 30), passengers: 3, vehicleType: "SUV", f: fare(280, 14, { driverAllowance: 300, toll: 650 }), status: "BOOKING_CONFIRMED" },
+    // Vehicle + driver assigned, ready to dispatch (Ready lane)
+    { n: 5, customer: irfan, source: "PHONE", bookingType: "AIRPORT", tripType: "ONE_WAY", pickup: "C-Scheme, Jaipur", drop: "Jaipur International Airport (T2)",
+      pickupDate: at(1, 5, 0), passengers: 2, vehicleType: "SUV", f: fare(18, 14, { night: 200, parking: 80 }), status: "DRIVER_ASSIGNED", vehicleId: fleet.innova, driverId: suresh.id },
+    // Dispatched: trip created with OTP (Running lane)
+    { n: 6, customer: anita, source: "REFERRAL", bookingType: "OUTSTATION", tripType: "ROUND_TRIP", pickup: "Hotel Clarks Amer, JLN Marg, Jaipur", drop: "Taj Mahal East Gate, Agra",
+      pickupDate: at(2, 7), returnDate: at(2, 22), passengers: 2, vehicleType: "SEDAN", f: fare(480, 12, { driverAllowance: 400, toll: 820, permit: 300 }), status: "READY_FOR_DISPATCH", vehicleId: fleet.city, driverId: ramesh.id },
+    // Trip in progress today
+    { n: 7, customer: vikram, source: "WEBSITE", bookingType: "OUTSTATION", tripType: "ROUND_TRIP", pickup: "Bani Park, Jaipur", drop: "Mehrangarh Fort, Jodhpur",
+      pickupDate: at(0, 6), returnDate: at(1, 20), passengers: 4, vehicleType: "SUV", f: fare(700, 14, { driverAllowance: 600, toll: 540 }), status: "TRIP_STARTED", vehicleId: fleet.scorpio, driverId: mahendra.id },
+    // Completed, invoiced, advance paid, balance due
+    { n: 8, customer: rajesh, source: "PHONE", bookingType: "OUTSTATION", tripType: "ROUND_TRIP", pickup: "Bani Park, Jaipur", drop: "Ajmer Sharif Dargah, Ajmer",
+      pickupDate: at(-5, 8), returnDate: at(-5, 20), passengers: 4, vehicleType: "SEDAN", f: fare(280, 11, { driverAllowance: 300, toll: 220 }), status: "INVOICE_GENERATED", vehicleId: fleet.etios, driverId: abdul.id },
+    // Closed: fully paid, rated, driver settled
+    { n: 9, customer: rajesh, source: "WEBSITE", bookingType: "AIRPORT", tripType: "ONE_WAY", pickup: "Jaipur International Airport (T2)", drop: "Bani Park, Jaipur",
+      pickupDate: at(-20, 23, 30), passengers: 2, vehicleType: "SUV", f: fare(16, 14, { night: 300, parking: 80 }), status: "CLOSED", vehicleId: fleet.innova, driverId: suresh.id },
+    // Cancelled by the customer before assignment
+    { n: 10, customer: sneha, source: "WEBSITE", bookingType: "LOCAL", tripType: "ONE_WAY", pickup: "Vaishali Nagar, Jaipur", drop: "Amer Fort, Jaipur",
+      pickupDate: at(4, 9), passengers: 2, vehicleType: "SEDAN", f: fare(40, 11), status: "CANCELLED" },
+  ];
+
+  const pad = (n: number) => String(n).padStart(3, "0");
+  let invoiceSeq = 0;
+
+  for (const s of stages) {
+    const lead = await prisma.lead.create({
+      data: {
+        leadNumber: `LD-DEMO-${pad(s.n)}`, status: "WON", source: s.source, name: s.customer.name, email: s.customer.email,
+        phone: s.customer.phone, city: "Jaipur", bookingType: s.bookingType, tripType: s.tripType, pickupAddress: s.pickup,
+        dropAddress: s.drop, pickupDate: s.pickupDate, returnDate: s.returnDate, passengers: s.passengers,
+        preferredVehicle: s.vehicleType, assignedToId: staff.salesExec.id, branchId,
+        convertedAt: new Date(s.pickupDate.getTime() - 3 * day), convertedToCustomerId: s.customer.id,
+      },
+    });
+    const quotation = await prisma.quotation.create({
+      data: {
+        quotationNumber: `QT-DEMO-${pad(s.n)}`, leadId: lead.id, status: "APPROVED", validUntil: new Date(s.pickupDate.getTime() - day),
+        bookingType: s.bookingType, tripType: s.tripType, pickupAddress: s.pickup, dropAddress: s.drop, pickupDate: s.pickupDate,
+        returnDate: s.returnDate, passengers: s.passengers, vehicleType: s.vehicleType, ...omitSubtotal(s.f),
+        createdById: staff.salesExec.id, approvedById: staff.opsManager.id, approvedAt: new Date(s.pickupDate.getTime() - 3 * day), branchId,
+      },
+    });
+
+    const tripStarted = ["TRIP_STARTED", "INVOICE_GENERATED", "CLOSED"].includes(s.status);
+    const tripDone = ["INVOICE_GENERATED", "CLOSED"].includes(s.status);
+    const booking = await prisma.booking.create({
+      data: {
+        bookingNumber: `BK-DEMO-${pad(s.n)}`, leadId: lead.id, quotationId: quotation.id, customerId: s.customer.id, branchId,
+        bookingType: s.bookingType, tripType: s.tripType, pickupAddress: s.pickup, dropAddress: s.drop, pickupDate: s.pickupDate,
+        pickupTime: `${String(s.pickupDate.getHours()).padStart(2, "0")}:${String(s.pickupDate.getMinutes()).padStart(2, "0")}`,
+        returnDate: s.returnDate, passengers: s.passengers, bags: s.passengers, preferredCategory: s.vehicleType,
+        status: s.status as never, vehicleId: s.vehicleId, driverId: s.driverId,
+        baseFare: s.f.baseFare, driverAllowance: s.f.driverAllowance, tollCharges: s.f.tollCharges, parkingCharges: s.f.parkingCharges,
+        permitCharges: s.f.permitCharges, nightCharges: s.f.nightCharges, discount: s.f.discount, gst: s.f.gst,
+        totalFare: s.f.totalFare, fare: s.f.totalFare, billableKm: s.f.totalKm,
+        paymentMethod: s.n === 9 ? "ONLINE" : "CASH",
+        paymentStatus: s.status === "CLOSED" ? "PAID" : s.status === "INVOICE_GENERATED" ? "PARTIAL" : "PENDING",
+        startTime: tripStarted ? s.pickupDate : null,
+        endTime: tripDone ? (s.returnDate ?? new Date(s.pickupDate.getTime() + 45 * 60_000)) : null,
+        specialInstructions: s.n === 6 ? "Senior citizens travelling; please help with luggage." : null,
+      },
+    });
+
+    // Dispatch entry (Operations Queue)
+    const dispatched = ["READY_FOR_DISPATCH", "TRIP_STARTED", "INVOICE_GENERATED", "CLOSED"].includes(s.status);
+    if (s.status !== "CANCELLED") {
+      await prisma.dispatch.create({
+        data: {
+          bookingId: booking.id, assignedById: staff.opsManager.id,
+          status: dispatched ? "DISPATCHED" : s.driverId ? "READY" : "PENDING",
+          vehicleId: s.vehicleId, vehicleCheckStatus: s.vehicleId ? "CLEARED" : null,
+          vehicleCheckedById: s.vehicleId ? staff.opsManager.id : null, vehicleCheckedAt: s.vehicleId ? at(-1) : null,
+          driverId: s.driverId, driverCheckStatus: s.driverId ? "ASSIGNED" : null,
+          driverAssignedById: s.driverId ? staff.opsManager.id : null, driverAssignedAt: s.driverId ? at(-1) : null,
+        },
+      });
+    } else {
+      await prisma.cancellation.create({
+        data: { bookingId: booking.id, cancelledById: s.customer.id, reason: "Plans changed: visiting Amer Fort next month instead." },
+      });
+    }
+
+    // Trip (only created by dispatch)
+    if (!dispatched) continue;
+    const trip = await prisma.trip.create({
+      data: {
+        tripNumber: `TR-DEMO-${pad(s.n)}`, bookingId: booking.id, vehicleId: s.vehicleId, driverId: s.driverId,
+        status: s.status === "READY_FOR_DISPATCH" ? "SCHEDULED" : s.status === "TRIP_STARTED" ? "IN_PROGRESS" : "COMPLETED",
+        pickupAddress: s.pickup, dropAddress: s.drop, scheduledPickupTime: s.pickupDate, otp: String(randomInt(1000, 10000)),
+        actualPickupTime: tripStarted ? s.pickupDate : null,
+        actualDropTime: tripDone ? (s.returnDate ?? new Date(s.pickupDate.getTime() + 45 * 60_000)) : null,
+        startOdometer: tripStarted ? 48_210 + s.n * 1000 : null,
+        endOdometer: tripDone ? 48_210 + s.n * 1000 + s.f.totalKm : null,
+        actualDistance: tripDone ? s.f.totalKm : null,
+      },
+    });
+    if (s.status === "TRIP_STARTED") {
+      await prisma.driverStatus.update({ where: { driverId: s.driverId! }, data: { online: true, lat: 26.9157, lng: 75.8059 } });
+    }
+    if (!tripDone) continue;
+
+    // Driver trip expenses
+    await prisma.expense.createMany({
+      data: [
+        { description: "Toll plazas (both ways)", amount: s.f.tollCharges || 120, category: "TOLL", vehicleId: s.vehicleId, tripId: trip.id, bookingId: booking.id, paidById: s.driverId },
+        { description: "Diesel refill", amount: Math.round(s.f.totalKm * 7.2), category: "FUEL", vehicleId: s.vehicleId, tripId: trip.id, bookingId: booking.id, paidById: s.driverId },
+      ],
+    });
+
+    // Invoice + payments (paid amounts come only from recorded payments)
+    invoiceSeq += 1;
+    const subtotal = s.f.subtotal;
+    const invoice = await prisma.invoice.create({
+      data: {
+        invoiceNumber: `INV-DEMO-${pad(invoiceSeq)}`, bookingId: booking.id, customerId: s.customer.id, branchId,
+        status: s.status === "CLOSED" ? "PAID" : "PARTIALLY_PAID", subtotal, gst: s.f.gst, discount: 0, total: s.f.totalFare,
+        paidAmount: s.status === "CLOSED" ? s.f.totalFare : 1000, paymentStatus: s.status === "CLOSED" ? "PAID" : "PARTIAL",
+        paymentMethod: s.status === "CLOSED" ? "ONLINE" : "CASH", dueDate: at(s.status === "CLOSED" ? -15 : 5),
+        paidAt: s.status === "CLOSED" ? at(-19) : null,
+      },
+    });
+    if (s.status === "CLOSED") {
+      await prisma.payment.create({
+        data: {
+          paymentNumber: `PAY-DEMO-${pad(s.n)}A`, bookingId: booking.id, invoiceId: invoice.id, customerId: s.customer.id, type: "FULL",
+          amount: s.f.totalFare, method: "ONLINE", reference: "UPI 4198-2207-6631", receivedById: staff.finance.id, receivedAt: at(-19),
+        },
+      });
+      await prisma.rating.create({
+        data: { bookingId: booking.id, raterId: s.customer.id, ratedId: s.driverId!, score: 5, comment: "Driver was waiting at arrivals despite the late flight. Very polite." },
+      });
+      const expenses = (s.f.tollCharges || 120) + Math.round(s.f.totalKm * 7.2);
+      await prisma.settlement.create({
+        data: {
+          tripId: trip.id, driverId: s.driverId!, totalEarnings: 900, advancePaid: 0, expenses, netPayable: 900 + expenses,
+          status: "PAID", paidAt: at(-15), notes: "Night airport duty: ₹900 + reimbursed trip expenses.",
+        },
+      });
+    } else {
+      await prisma.payment.create({
+        data: {
+          paymentNumber: `PAY-DEMO-${pad(s.n)}A`, bookingId: booking.id, invoiceId: invoice.id, customerId: s.customer.id, type: "ADVANCE",
+          amount: 1000, method: "CASH", reference: "Receipt #A-1042", receivedById: staff.finance.id, receivedAt: at(-6),
+        },
+      });
+    }
+  }
+
+  console.log("Demo pipeline: 3 open leads, 7 bookings (awaiting, assigned, dispatched, in progress, invoiced, closed, cancelled)");
+}
+
+function omitSubtotal<T extends { subtotal: number }>(f: T): Omit<T, "subtotal"> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { subtotal, ...rest } = f;
+  return rest;
+}
+
+function printCredentials() {
+  if (credentials.length === 0) {
+    console.log("\nNo new accounts were created (existing passwords are unchanged).");
+    return;
+  }
+  console.log("\n📋 New login credentials (shown once; store them in your password manager):");
+  console.log("   Staff sign in at /admin/login, drivers and customers at /login.\n");
+  for (const c of credentials) {
+    console.log(`   ${c.role.padEnd(17)} ${c.name.padEnd(26)} ${c.email.padEnd(38)} ${c.password}`);
+  }
+}
+
+// =====================================================================================
+// Website content, fleet catalogue and pricing (unchanged from the original seed)
+// =====================================================================================
+
+async function seedContent() {
   // ====== CMS: Website Settings ======
   const defaultSettings = [
     { key: "company_name", value: "Aradhana Travel Services" },
@@ -514,12 +738,6 @@ async function main() {
     });
   }
   console.log("Created pricing page content");
-
-  console.log("\n✅ Seed completed!");
-  console.log("\n📋 Login Credentials:");
-  console.log("   Admin:    admin@aradhana.com / admin123");
-  console.log("   Driver:   driver@aradhana.com / driver123");
-  console.log("   Customer: customer@aradhana.com / customer123");
 }
 
 main()

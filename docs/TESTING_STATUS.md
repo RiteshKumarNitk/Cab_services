@@ -128,3 +128,27 @@ Limits: synthetic distribution, warm cache, single client, server-side execution
 * `prisma/migrations/0_init` was generated from the schema (`migrate diff --from-empty`): 43 tables, 17 enums, 123 indexes. It matches production (empty drift diff).
 * `prisma/migrations/20261013000000_add_assignment_indexes`: the 4 indexes above.
 * **Not yet applied to production.** `migrate status` reports `0_init` pending. The baseline/deploy step was blocked by the tool's permission policy for production deploys and is left for you to run (IMPLEMENTATION_PLAN P1-1).
+
+## 9. Neon services end-to-end (2026-10-13)
+
+Production build (`next build`) against the new CarService DB: ✅ exit 0, 135/135 static pages (fewer than before because the new DB has no blog or fleet rows to prerender). Unit tests: ✅ 52/52 (adds `uploads.test.ts`).
+
+`next start` plus an HTTP test script (temporary users with random passwords, everything removed afterwards, residue check: 0 rows left):
+
+| # | Check | Result |
+|---|---|---|
+| 1 | `GET /` renders from the new DB | ✅ 200 |
+| 2 | `POST /api/enquiries` creates a lead, row persisted | ✅ 201 |
+| 3 | Duplicate enquiry returns the same lead | ✅ 200 |
+| 4 | Anonymous upload rejected | ✅ 401 |
+| 5 | Driver signs in (NextAuth credentials) | ✅ (needed `AUTH_TRUST_HOST`) |
+| 6 | Driver uploads a receipt to the `assets` bucket | ✅ 201 |
+| 7 | Owner gets a presigned redirect to the branch storage endpoint | ✅ 302 |
+| 8 | Presigned URL returns identical bytes (sha256) | ✅ 200 |
+| 9 | Unsigned object URL denied (bucket private) | ✅ 403 |
+| 10 | Another driver cannot read the object | ✅ 404 |
+| 11 | Expense stores the key, not the bytes | ✅ 201 |
+| 12 | Inline base64 receipt rejected | ✅ 400 |
+| 13 | Another driver cannot attach the key | ✅ 400 |
+| 14 | Neon Auth JWKS serves an EdDSA key | ✅ 200 |
+| 15 | Neon Auth `/ok` | ✅ 200 |

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isOwnedObjectKey } from "@/lib/uploads";
 import { parsePageParams, listResponse } from "@/lib/pagination";
 
 export async function POST(req: Request) {
@@ -16,6 +17,15 @@ export async function POST(req: Request) {
     if (!amount || !category) {
       return NextResponse.json(
         { error: "Amount and category are required" },
+        { status: 400 }
+      );
+    }
+
+    // Receipts live in object storage; only a key the driver uploaded may be attached.
+    // (Previously the page sent the whole image as a base64 data URL stored in this column.)
+    if (receiptUrl && !isOwnedObjectKey(String(receiptUrl), session.user.id, "receipts")) {
+      return NextResponse.json(
+        { error: "Upload the receipt via /api/uploads and send the returned key" },
         { status: 400 }
       );
     }

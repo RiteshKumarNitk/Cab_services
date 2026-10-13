@@ -19,7 +19,9 @@ When a dependency forces a different order, the reason is given in the task.
 | **D5** | Remove the "mark paid" button on the bookings list (sets paid without a payment record)? | Finance integrity: money marked received with no transaction | Replace it with "Record payment" (opens the existing dialog) |
 | **D6** | Remove seed credentials from `README.md`, and confirm the seed is never run on production | Default admin password | Yes |
 | **D7** | Are the hard-coded tour prices, ratings, review counts and offers real? | Truthful-claims requirement; one offer has expired | Move them to the CMS, or hide them until verified |
-| **D8** | ~~Is the Neon database in `.env` production?~~ **Answered 2026-10-13: yes, production.** | Migrations are applied with `migrate deploy` only. Development needs its own DB (Neon branch). | |
+| **D8** | ~~Is the Neon database in `.env` production?~~ **Answered 2026-10-13: yes, production.** Superseded the same day: the app moved to the new Neon project CarService (see PROJECT_STATUS §9), where both migrations are applied. | Migrations are applied with `migrate deploy` only. Development needs its own DB (Neon branch). | |
+| **D9** | Migrate login from NextAuth to Neon Auth (Managed Better Auth)? Neon Auth is provisioned but unused. | Two auth systems side by side would be confusing. A migration moves all users, roles and sessions. | Keep NextAuth unless you need Neon Auth features (OAuth, magic links, MFA, organizations) |
+| **D10** | Seed or migrate data into the new CarService DB (vehicles, pricing, CMS content, staff accounts)? It is empty. | The site shows default or empty content, and nobody can log in until staff accounts exist | Create staff accounts with a one-off script and strong passwords, not `prisma db seed` (fixed demo passwords). Copy vehicles and CMS rows from the old DB if they are real. |
 
 ---
 

@@ -121,6 +121,21 @@ export default function DriverExpensesPage() {
 
     setSubmitting(true);
     try {
+      // Upload the receipt to object storage first; the expense stores only the returned key.
+      let receiptKey: string | null = null;
+      if (receiptFile) {
+        const form = new FormData();
+        form.append("file", receiptFile);
+        form.append("folder", "receipts");
+        const up = await fetch("/api/uploads", { method: "POST", body: form });
+        const upData = await up.json().catch(() => ({}));
+        if (!up.ok) {
+          toast.error(upData.error || "Could not upload the receipt");
+          return;
+        }
+        receiptKey = upData.key;
+      }
+
       const res = await fetch("/api/driver/expenses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -128,7 +143,7 @@ export default function DriverExpensesPage() {
           amount: parseFloat(amount),
           category,
           description,
-          receiptUrl: receiptPreview || null,
+          receiptUrl: receiptKey,
           bookingId: bookingId || null,
         }),
       });
@@ -324,6 +339,16 @@ export default function DriverExpensesPage() {
                       </div>
                       {expense.description && (
                         <p className="text-xs text-gray-600 mt-1">{expense.description}</p>
+                      )}
+                      {expense.receiptUrl && !expense.receiptUrl.startsWith("data:") && (
+                        <a
+                          href={`/api/uploads?key=${encodeURIComponent(expense.receiptUrl)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:underline mt-1 inline-block"
+                        >
+                          View receipt
+                        </a>
                       )}
                       <div className="flex justify-between items-center mt-2 text-xs text-gray-400">
                         <span>{formatDateTime(expense.createdAt)}</span>

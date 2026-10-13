@@ -14,6 +14,10 @@ Checks: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`.
 
 > pnpm is the only package manager (`package-lock.json` was removed on 2026-10-13). Don't run `npm install`.
 
+### Neon
+
+This app runs on Neon project **CarService** (`neon.ts` declares Postgres, Neon Auth and the private `assets` bucket). After `neon login`, `neon deploy` provisions what `neon.ts` declares and writes `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `NEON_AUTH_*` and `AWS_*` (object storage) into `.env`. Set `AUTH_TRUST_HOST=true` wherever the app runs outside Vercel.
+
 ### Database migrations
 
 Schema changes go through Prisma Migrate (`prisma/migrations/`, baseline `0_init`).

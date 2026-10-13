@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { FINANCE_READ_ROLES, hasRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
@@ -31,7 +32,7 @@ export async function GET(req: Request) {
       return NextResponse.json(invoices);
     }
 
-    if (session.user.role !== "CUSTOMER") {
+    if (hasRole(session.user.role, FINANCE_READ_ROLES)) {
       const invoices = await prisma.invoice.findMany({
         include: {
           booking: {

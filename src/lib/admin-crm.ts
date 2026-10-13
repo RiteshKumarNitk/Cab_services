@@ -3,6 +3,7 @@
 import { updateTag } from "next/cache";
 import { prisma } from "./prisma";
 import { auth } from "./auth";
+import { convertLeadToBooking as convertLead } from "./lead-conversion";
 import type { LeadStatus, BookingType, TripType, VehicleType } from "@prisma/client";
 
 const CRM_ROLES = ["SUPER_ADMIN", "ADMIN", "BOOKING_MANAGER", "SUPPORT_EXECUTIVE"];
@@ -117,53 +118,9 @@ export async function convertLeadToBooking(leadId: string, quotationId?: string)
   const session = await auth();
   canAccess(session);
 
-  const lead = await prisma.lead.findUnique({
-    where: { id: leadId },
-    include: { quotations: true },
-  });
-  if (!lead) throw new Error("Lead not found");
-
-  const quotation = quotationId
-    ? lead.quotations.find((q) => q.id === quotationId)
-    : lead.quotations.find((q) => q.status === "APPROVED");
-
-  const customerEmail = lead.email ?? `lead-${lead.leadNumber}@pending.com`;
-  let customer = await prisma.user.findUnique({ where: { email: customerEmail } });
-  if (!customer) {
-    customer = await prisma.user.create({
-      data: {
-        email: customerEmail,
-        name: lead.name,
-        phone: lead.phone,
-        role: "CUSTOMER",
-      },
-    });
-  }
-
-  const bookingNumber = `BK-${Date.now().toString(36).toUpperCase()}`;
-
-  const booking = await prisma.booking.create({
-    data: {
-      bookingNumber,
-      leadId: lead.id,
-      quotationId: quotation?.id ?? null,
-      customerId: customer.id,
-      bookingType: lead.bookingType ?? "LOCAL",
-      tripType: lead.tripType ?? "ONE_WAY",
-      pickupAddress: lead.pickupAddress ?? "",
-      dropAddress: lead.dropAddress ?? "",
-      pickupDate: lead.pickupDate ?? new Date(),
-      pickupTime: "10:00",
-      passengers: lead.passengers ?? 1,
-      preferredCategory: lead.preferredVehicle ?? "SEDAN",
-      status: "PENDING",
-    },
-  });
-
-  await prisma.lead.update({
-    where: { id: leadId },
-    data: { status: "WON", convertedAt: new Date() },
-  });
+  // Single conversion path shared with POST /api/admin/leads/[id]/convert
+  // (approved quotation required, idempotent, creates the dispatch entry).
+  const { booking } = await convertLead(leadId, session.user!.id!, quotationId);
 
   updateTag("leads");
   updateTag("bookings");

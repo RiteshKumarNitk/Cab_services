@@ -19,13 +19,37 @@ export default function FeedbackPage() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const [error, setError] = useState("");
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
-    // Simulate submission
-    await new Promise((r) => setTimeout(r, 1000));
-    setSubmitted(true);
-    setLoading(false);
+    setError("");
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email,
+          department: "feedback",
+          subject: `Feedback${category ? `: ${category}` : ""}${rating ? ` (${rating}/5)` : ""}`,
+          message,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const firstFieldError = data.fields ? Object.values(data.fields)[0] : null;
+        setError((firstFieldError as string) || data.error || "Could not send your feedback. Please try again.");
+        return;
+      }
+      setSubmitted(true);
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (submitted) {
@@ -97,6 +121,7 @@ export default function FeedbackPage() {
                 <Label htmlFor="message">Your Message</Label>
                 <Textarea id="message" value={message} onChange={(e) => setMessage(e.target.value)} required placeholder="Tell us about your experience..." rows={4} />
               </div>
+              {error && <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg p-3" role="alert">{error}</p>}
               <Button type="submit" className="w-full h-11 bg-red-700 hover:bg-red-800" disabled={loading}>
                 <Send className="h-4 w-4 mr-2" /> {loading ? "Submitting..." : "Submit Feedback"}
               </Button>

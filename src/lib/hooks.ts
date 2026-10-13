@@ -48,27 +48,34 @@ export function useCreateBooking() {
 export function useUpdateBookingStatus() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       id,
       status,
       reason,
+      otp,
     }: {
       id: string;
       status: string;
       reason?: string;
-    }) =>
-      fetch(`/api/bookings/${id}/status`, {
+      otp?: string;
+    }) => {
+      const res = await fetch(`/api/bookings/${id}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, reason }),
-      }).then((res) => res.json()),
+        body: JSON.stringify({ status, reason, otp }),
+      });
+      const data = await res.json().catch(() => ({}));
+      // Surface the server's reason (invalid transition, wrong OTP, ...) instead of a false success.
+      if (!res.ok) throw new Error(data.error || "Failed to update booking status");
+      return data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["booking"] });
       toast.success("Booking status updated!");
     },
-    onError: () => {
-      toast.error("Failed to update booking status");
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Failed to update booking status");
     },
   });
 }

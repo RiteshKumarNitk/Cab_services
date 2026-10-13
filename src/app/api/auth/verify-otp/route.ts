@@ -17,15 +17,31 @@ export async function POST(request: Request) {
   const cleanPhone = phone.replace(/\s/g, "");
   let user = await prisma.user.findFirst({ where: { phone: cleanPhone } });
 
+  // OTP sign-in is for customers only; staff and drivers must use their password.
+  if (user && user.role !== "CUSTOMER") {
+    return NextResponse.json(
+      { error: "This phone number belongs to a staff or driver account. Please sign in with email and password." },
+      { status: 403 }
+    );
+  }
+  if (user && !user.isActive) {
+    return NextResponse.json({ error: "Account is disabled" }, { status: 403 });
+  }
+
   if (!user) {
-    user = await prisma.user.create({
-      data: {
-        name: result.name || `Customer ${cleanPhone.slice(-4)}`,
-        email: `customer_${cleanPhone.slice(-4)}@aradhanatravel.com`,
-        phone: cleanPhone,
-        role: "CUSTOMER",
-      },
-    });
+    const digits = cleanPhone.replace(/\D/g, "");
+    const email = `customer_${digits}@aradhanatravel.com`;
+    user =
+      (await prisma.user.findUnique({ where: { email } })) ??
+      (await prisma.user.create({
+        data: {
+          name: result.name || `Customer ${digits.slice(-4)}`,
+          // User.email is required; phone-only customers get a placeholder unique to their full number.
+          email,
+          phone: cleanPhone,
+          role: "CUSTOMER",
+        },
+      }));
   }
 
   // Generate one-time auth token for NextAuth signIn

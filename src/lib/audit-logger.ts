@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { eventBus, type AppEvent } from "./event-bus";
+import { eventBus, type AppEvent, type EventType } from "./event-bus";
 
 async function onAnyEvent(event: AppEvent) {
   await prisma.auditLog.create({
@@ -28,7 +28,7 @@ function deriveEntity(type: string): string {
 }
 
 export function initAuditLogger() {
-  const eventTypes = [
+  const eventTypes: EventType[] = [
     "BOOKING_CREATED", "BOOKING_STATUS_CHANGED", "BOOKING_CANCELLED",
     "LEAD_CREATED", "LEAD_STATUS_CHANGED",
     "QUOTATION_CREATED", "QUOTATION_APPROVED", "QUOTATION_REJECTED",
@@ -39,6 +39,6 @@ export function initAuditLogger() {
     "MAINTENANCE_SCHEDULED", "REMINDER_DUE",
   ];
   for (const type of eventTypes) {
-    eventBus.subscribe(type as any, onAnyEvent);
+    eventBus.subscribe(type, onAnyEvent);
   }
 }

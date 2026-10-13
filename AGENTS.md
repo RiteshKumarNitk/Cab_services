@@ -31,10 +31,11 @@ Lead → Qualified → Follow-up → Quotation → Negotiation → Customer Appr
 - **Booking requires approved quotation**: Lead conversion API (`/api/admin/leads/[id]/convert`) returns 400 if no approved quotation exists
 - **Trip is NOT auto-created on booking confirm**: Trip only created via Dispatch Queue finalization (`/api/admin/dispatch/[id]/finalize`)
 - **Booking Status** tracks full lifecycle: `NEW_LEAD → QUALIFIED → CONTACTED → QUOTE_PREPARING → QUOTE_SENT → QUOTE_ACCEPTED → BOOKING_CONFIRMED → WAITING_ASSIGNMENT → VEHICLE_ASSIGNED → DRIVER_ASSIGNED → READY_FOR_DISPATCH → TRIP_STARTED → PICKUP_COMPLETED → DROP_COMPLETED → TRIP_COMPLETED → INVOICE_GENERATED → CLOSED → CANCELLED`
-- **Customer Timeline** is a simplified abstract of internal status (map in `src/app/api/bookings/[id]/status/route.ts`)
+- **Customer Timeline** is a simplified abstract of internal status (map in `src/lib/customer-timeline.ts`)
 - **Vehicle Assignment** routes through `src/lib/vehicle-availability.ts` (checks bookings, maintenance, insurance, fitness, permit, RC before assigning)
 - **Driver Assignment** routes through `src/lib/driver-availability.ts` (checks leave, active trips, working hours, max hours, online status)
-- **Notifications** should be event-driven, not inline (use `notifyBookingStatusChange` in `src/lib/notifications.ts`)
+- **Notifications** should be event-driven, not inline (emit `eventBus.emit(createEvent(...))` from `src/lib/event-bus.ts` after the transaction commits; subscribers in `src/lib/notifications.ts`, `audit-logger.ts`, `webhook-dispatcher.ts`)
+- **Booking status rules** (transitions, who may perform them, trip-status sync) live in `src/lib/booking-lifecycle.ts`; API role groups in `src/lib/authz-roles.ts`
 
 ## Module Layout (by department)
 ```

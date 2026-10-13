@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Loader2, Plus } from "lucide-react";
+import { toast } from "sonner";
 
 interface BookingOption {
   id: string;
@@ -53,12 +54,13 @@ export function RecordPaymentDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, amount: parseFloat(form.amount) }),
       });
-      if (!res.ok) throw new Error("Failed to record payment");
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed to record payment");
       setOpen(false);
       setForm({ bookingId: "", amount: "", type: "ADVANCE", method: "CASH", reference: "", notes: "" });
       onSuccess?.();
     } catch (err) {
       console.error(err);
+      toast.error(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -153,7 +155,6 @@ export function GenerateInvoiceDialog({
     notes: "",
   });
 
-  const selectedBooking = bookings.find((b) => b.id === form.bookingId);
   const total = (parseFloat(form.subtotal) || 0) + (parseFloat(form.gst) || 0) - (parseFloat(form.discount) || 0);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -166,23 +167,20 @@ export function GenerateInvoiceDialog({
         gst: parseFloat(form.gst) || 0,
         discount: parseFloat(form.discount) || 0,
         dueDate: form.dueDate || null,
-        customerId: selectedBooking?.customer ? undefined : null,
         notes: form.notes || null,
       };
-      if (selectedBooking?.customer?.name) {
-        body.customerId = selectedBooking.customer.name;
-      }
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error("Failed to generate invoice");
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed to generate invoice");
       setOpen(false);
       setForm({ bookingId: "", subtotal: "", gst: "", discount: "0", dueDate: "", notes: "" });
       onSuccess?.();
     } catch (err) {
       console.error(err);
+      toast.error(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -285,12 +283,13 @@ export function LogExpenseDialog({
           vehicleId: form.vehicleId || null,
         }),
       });
-      if (!res.ok) throw new Error("Failed to log expense");
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed to log expense");
       setOpen(false);
       setForm({ description: "", amount: "", category: "FUEL", vehicleId: "", notes: "", date: new Date().toISOString().split("T")[0] });
       onSuccess?.();
     } catch (err) {
       console.error(err);
+      toast.error(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -395,12 +394,13 @@ export function DriverSettlementDialog({
           expenses: parseFloat(form.expenses),
         }),
       });
-      if (!res.ok) throw new Error("Failed to create settlement");
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed to create settlement");
       setOpen(false);
       setForm({ driverId: "", totalEarnings: "", advancePaid: "0", expenses: "0", notes: "" });
       onSuccess?.();
     } catch (err) {
       console.error(err);
+      toast.error(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }

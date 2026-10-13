@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { ADMIN_ROLES, hasRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
@@ -9,7 +10,7 @@ export async function GET(
 ) {
   const { id } = await params;
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session || !hasRole(session.user?.role, ADMIN_ROLES)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -59,7 +60,7 @@ export async function PUT(
 ) {
   const { id } = await params;
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session || !hasRole(session.user?.role, ADMIN_ROLES)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -113,7 +114,7 @@ export async function DELETE(
 ) {
   const { id } = await params;
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session || !hasRole(session.user?.role, ADMIN_ROLES)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

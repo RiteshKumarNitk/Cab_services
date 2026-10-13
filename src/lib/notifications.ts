@@ -97,6 +97,14 @@ async function onBookingEvent(event: AppEvent) {
               data: JSON.stringify({ bookingId, type: "trip_ready" }),
             });
           }
+          if (booking.driverId) {
+            notifications.push({
+              userId: booking.driverId, channel: "PUSH", status: "PENDING",
+              title: "New Trip Dispatched",
+              body: `Booking ${booking.bookingNumber || bookingId.slice(0, 8)} has been dispatched to you. Ask the customer for the trip OTP to start.`,
+              data: JSON.stringify({ bookingId, type: "trip_dispatched" }),
+            });
+          }
           break;
         case "TRIP_STARTED":
           if (booking.customerId) {

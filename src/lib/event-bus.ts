@@ -48,6 +48,10 @@ class EventBus {
   }
 
   async emit(event: AppEvent): Promise<void> {
+    // Subscribers (notifications, audit log, webhooks) register themselves on first use.
+    // Previously initEventSystem() was never called, so no subscriber ever ran.
+    await ensureSubscribers();
+
     this.history.push(event);
     if (this.history.length > this.maxHistory) {
       this.history.shift();
@@ -78,6 +82,19 @@ class EventBus {
       .filter((e) => e.data?.entityId === entityId || e.data?.bookingId === entityId || e.data?.leadId === entityId)
       .slice(-limit);
   }
+}
+
+let subscribersReady: Promise<void> | null = null;
+
+function ensureSubscribers(): Promise<void> {
+  // Dynamic import breaks the static cycle event-bus -> event-init -> notifications -> event-bus.
+  subscribersReady ??= import("./event-init")
+    .then((m) => m.initEventSystem())
+    .catch((err) => {
+      subscribersReady = null;
+      console.error("[EventBus] Failed to initialize subscribers:", err);
+    });
+  return subscribersReady;
 }
 
 export const eventBus = new EventBus();

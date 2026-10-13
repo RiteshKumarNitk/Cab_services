@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getCustomerFacingStatus, getCustomerTimeline } from "@/lib/customer-timeline";
+import { STAFF_ROLES, hasRole } from "@/lib/authz";
 
 export async function GET(
   req: Request,
@@ -43,16 +44,19 @@ export async function GET(
 
     // Check authorization
     const role = session.user.role;
-    if (
-      role !== "ADMIN" &&
-      booking.customerId !== session.user.id &&
-      booking.driverId !== session.user.id
-    ) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    const isStaff = hasRole(role, STAFF_ROLES);
+    const isCustomer = booking.customerId === session.user.id;
+    const isDriver = booking.driverId === session.user.id;
+    if (!isStaff && !isCustomer && !isDriver) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    // The trip OTP is the customer's proof of pickup: the driver must get it from the customer.
+    const trip = booking.trip && !isStaff && !isCustomer ? { ...booking.trip, otp: null } : booking.trip;
 
     return NextResponse.json({
       ...booking,
+      trip,
       customerFacingStatus: getCustomerFacingStatus(booking.status),
       timeline: getCustomerTimeline(booking.status),
     });
@@ -84,8 +88,8 @@ export async function PUT(
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
-    if (session.user.role === "DRIVER" && booking.driverId !== session.user.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    if (booking.driverId !== session.user.id && !hasRole(session.user.role, STAFF_ROLES)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     if (driverNotes !== undefined) {

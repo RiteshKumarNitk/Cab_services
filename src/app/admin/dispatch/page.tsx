@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Clock, Car, User, MapPin, ArrowRight, AlertTriangle, CheckCircle2, Gauge, RefreshCw } from "lucide-react";
+import { Car, User, MapPin, CheckCircle2, Gauge, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 interface DispatchItem {
   id: string;
@@ -59,9 +60,12 @@ export default function DispatchBoard() {
         fetch("/api/admin/vehicles?all=true"),
         fetch("/api/admin/users?role=DRIVER"),
       ]);
-      setItems(await dispatchRes.json());
-      setVehicles(await vehicleRes.json());
-      setDrivers(await driverRes.json());
+      const [d, v, dr] = await Promise.all([dispatchRes.json(), vehicleRes.json(), driverRes.json()]);
+      if (!dispatchRes.ok) toast.error(d.error || "Could not load the dispatch queue");
+      // Guard against error payloads so the board never crashes on a failed request.
+      setItems(Array.isArray(d) ? d : []);
+      setVehicles(Array.isArray(v) ? v : []);
+      setDrivers(Array.isArray(dr) ? dr : []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -71,34 +75,34 @@ export default function DispatchBoard() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const assignVehicle = async (dispatchId: string, vehicleId: string) => {
+  // Run a dispatch action and report the server's verdict (availability failures, conflicts).
+  const runAction = async (dispatchId: string, path: string, body: unknown, success: string) => {
     setAssigning(dispatchId);
-    await fetch(`/api/admin/dispatch/${dispatchId}/assign-vehicle`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ vehicleId }),
-    });
-    await fetchData();
-    setAssigning(null);
+    try {
+      const res = await fetch(`/api/admin/dispatch/${dispatchId}/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) toast.success(success);
+      else toast.error(data.error || "Action failed");
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      await fetchData();
+      setAssigning(null);
+    }
   };
 
-  const assignDriver = async (dispatchId: string, driverId: string) => {
-    setAssigning(dispatchId);
-    await fetch(`/api/admin/dispatch/${dispatchId}/assign-driver`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ driverId }),
-    });
-    await fetchData();
-    setAssigning(null);
-  };
+  const assignVehicle = (dispatchId: string, vehicleId: string) =>
+    runAction(dispatchId, "assign-vehicle", { vehicleId }, "Vehicle assigned");
 
-  const finalize = async (dispatchId: string) => {
-    setAssigning(dispatchId);
-    await fetch(`/api/admin/dispatch/${dispatchId}/finalize`, { method: "POST" });
-    await fetchData();
-    setAssigning(null);
-  };
+  const assignDriver = (dispatchId: string, driverId: string) =>
+    runAction(dispatchId, "assign-driver", { driverId }, "Driver assigned");
+
+  const finalize = (dispatchId: string) =>
+    runAction(dispatchId, "finalize", null, "Dispatched — trip created");
 
   const getLaneItems = (lane: Lane) => {
     const filtered = items.filter(lane.filter);
@@ -120,7 +124,7 @@ export default function DispatchBoard() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dispatch Board</h1>
-          <p className="text-gray-500">{items.filter(d => d.status !== "DISPATCHED").length} pending · {items.filter(d => d.status === "DISPATCHED").length} dispatched</p>
+          <p className="text-gray-500">{items.filter(d => d.status !== "DISPATCHED").length} pending Â· {items.filter(d => d.status === "DISPATCHED").length} dispatched</p>
         </div>
         <Button onClick={fetchData} variant="outline" className="border-gray-200">
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} /> Refresh
@@ -220,10 +224,11 @@ function DispatchCard({
           ) : (
             <select
               onChange={(e) => e.target.value && onAssignDriver(item.id, e.target.value)}
-              disabled={assigning === item.id}
-              className="text-xs border border-gray-200 rounded px-1 py-0.5 flex-1"
+              disabled={assigning === item.id || !item.vehicle}
+              title={item.vehicle ? undefined : "Assign a vehicle first"}
+              className="text-xs border border-gray-200 rounded px-1 py-0.5 flex-1 disabled:opacity-50"
             >
-              <option value="">Assign driver...</option>
+              <option value="">{item.vehicle ? "Assign driver..." : "Assign vehicle first"}</option>
               {drivers.map(d => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}

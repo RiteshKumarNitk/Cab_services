@@ -1,4 +1,6 @@
 import { prisma } from "./prisma";
+import { bookingWindow, isWithinShift, parseClock } from "./booking-lifecycle";
+import { overlappingBookingsWhere, type Db } from "./vehicle-availability";
 
 export interface DriverAvailabilityCheck {
   available: boolean;
@@ -7,108 +9,77 @@ export interface DriverAvailabilityCheck {
     onLeave: boolean;
     hasActiveTrip: boolean;
     withinWorkingHours: boolean;
-    withinMaxHours: boolean;
     online: boolean;
   };
 }
 
-const MAX_WORKING_HOURS_PER_DAY = 12;
-const MAX_CONTINUOUS_HOURS = 8;
-
 export async function checkDriverAvailability(
   driverId: string,
   pickupDate: Date,
-  dropDate?: Date
+  dropDate?: Date,
+  options: { excludeBookingId?: string; pickupTime?: string } = {},
+  db: Db = prisma
 ): Promise<DriverAvailabilityCheck> {
-  const driver = await prisma.user.findUnique({
+  const window = bookingWindow(pickupDate, dropDate);
+
+  const driver = await db.user.findUnique({
     where: { id: driverId },
     include: {
       driverStatus: true,
       driverLeaves: {
         where: {
           status: "APPROVED",
-          startDate: { lte: dropDate || pickupDate },
-          endDate: { gte: pickupDate },
+          startDate: { lte: window.end },
+          endDate: { gte: window.start },
         },
       },
     },
   });
 
-  if (!driver || driver.role !== "DRIVER") {
+  if (!driver || driver.role !== "DRIVER" || !driver.isActive) {
     return {
       available: false,
       reason: "Not a valid driver",
-      checks: { onLeave: true, hasActiveTrip: true, withinWorkingHours: true, withinMaxHours: true, online: true },
+      checks: { onLeave: true, hasActiveTrip: true, withinWorkingHours: true, online: true },
     };
   }
 
-  const dropTime = dropDate || pickupDate;
-
-  // Check 1: On leave?
+  // Check 1: On leave during the trip window?
   const onLeave = driver.driverLeaves.length > 0;
 
-  // Check 2: Already assigned to an active trip?
-  const activeTrips = await prisma.trip.findMany({
-    where: {
-      driverId,
-      status: { notIn: ["COMPLETED", "CANCELLED"] },
-      scheduledPickupTime: { lte: dropTime },
-    },
+  // Check 2: Already holding another booking (or an undispatched assignment) in the same window?
+  const [conflictingBookings, conflictingDispatches] = await Promise.all([
+    db.booking.count({ where: { driverId, ...overlappingBookingsWhere(window, options.excludeBookingId) } }),
+    db.dispatch.count({
+      where: {
+        driverId,
+        status: { not: "DISPATCHED" },
+        booking: overlappingBookingsWhere(window, options.excludeBookingId),
+      },
+    }),
+  ]);
+  const hasActiveTrip = conflictingBookings + conflictingDispatches > 0;
+
+  // Check 3: Pickup within the driver's shift for that weekday (no shift defined = available all day).
+  // Bookings store the pickup clock time separately in `pickupTime`; prefer it over the date's time part.
+  const shift = await db.driverShift.findUnique({
+    where: { driverId_dayOfWeek: { driverId, dayOfWeek: pickupDate.getDay() } },
   });
-  const hasActiveTrip = activeTrips.length > 0;
+  const pickupMinutes = parseClock(options.pickupTime) ?? pickupDate.getHours() * 60 + pickupDate.getMinutes();
+  const withinWorkingHours = shift ? isWithinShift(pickupMinutes, shift) : true;
 
-  // Check 3: Within working hours (use pickupDate's day of week)
-  const dayOfWeek = pickupDate.getDay();
-  const shift = await prisma.driverShift.findUnique({
-    where: { driverId_dayOfWeek: { driverId, dayOfWeek } },
-  });
-  const withinWorkingHours = shift
-    ? (() => {
-        const pickupHour = pickupDate.getHours();
-        const pickupMin = pickupDate.getMinutes();
-        const startParts = shift.startTime.split(":").map(Number);
-        const endParts = shift.endTime.split(":").map(Number);
-        const pickupMins = pickupHour * 60 + pickupMin;
-        const startMins = startParts[0] * 60 + (startParts[1] || 0);
-        const endMins = endParts[0] * 60 + (endParts[1] || 0);
-        return pickupMins >= startMins && pickupMins <= endMins;
-      })()
-    : true; // No shift defined = available all day
+  // Check 4: Online status. Only meaningful for trips starting today; a driver who is
+  // offline right now can still be scheduled for a future day.
+  const startsToday = window.start.getTime() === bookingWindow(new Date()).start.getTime();
+  const online = !startsToday || (driver.driverStatus?.online ?? true);
 
-  // Check 4: Check total hours already booked today
-  const todayStart = new Date(pickupDate);
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(pickupDate);
-  todayEnd.setHours(23, 59, 59, 999);
-
-  const todayTrips = await prisma.trip.findMany({
-    where: {
-      driverId,
-      scheduledPickupTime: { gte: todayStart, lte: todayEnd },
-      status: { not: "CANCELLED" },
-    },
-  });
-
-  const totalBookedMinutes = todayTrips.reduce((acc, trip) => {
-    if (trip.actualPickupTime && trip.actualDropTime) {
-      return acc + (trip.actualDropTime.getTime() - trip.actualPickupTime.getTime()) / 60000;
-    }
-    // Estimate 30 min per km for non-completed trips
-    const estDuration = trip.actualDistance ? trip.actualDistance * 0.5 : 60;
-    return acc + estDuration;
-  }, 0);
-
-  const newTripEstimate = dropTime.getTime() - pickupDate.getTime() / 60000;
-  const withinMaxHours = totalBookedMinutes + (newTripEstimate || 60) <= MAX_WORKING_HOURS_PER_DAY * 60;
-
-  // Check 5: Online status
-  const online = driver.driverStatus?.online ?? true;
+  // Note: the daily max-hours rule is implied by the window check above — with day-granularity
+  // windows a driver can hold at most one booking per day. See IMPLEMENTATION_PLAN.md (D3).
 
   const failedChecks: string[] = [];
   if (onLeave) failedChecks.push("on leave");
-  if (hasActiveTrip) failedChecks.push("already on a trip");
+  if (hasActiveTrip) failedChecks.push("already assigned to another trip in this period");
   if (!withinWorkingHours) failedChecks.push("outside working hours");
-  if (!withinMaxHours) failedChecks.push("would exceed max hours");
   if (!online) failedChecks.push("offline");
 
   const available = failedChecks.length === 0;
@@ -116,13 +87,14 @@ export async function checkDriverAvailability(
   return {
     available,
     reason: available ? undefined : `Driver unavailable: ${failedChecks.join(", ")}`,
-    checks: { onLeave, hasActiveTrip, withinWorkingHours, withinMaxHours, online },
+    checks: { onLeave, hasActiveTrip, withinWorkingHours, online },
   };
 }
 
 export async function findAvailableDrivers(
   pickupDate: Date,
-  dropDate?: Date
+  dropDate?: Date,
+  options: { excludeBookingId?: string; pickupTime?: string } = {}
 ) {
   const drivers = await prisma.user.findMany({
     where: {
@@ -131,14 +103,13 @@ export async function findAvailableDrivers(
     },
     include: {
       driverStatus: true,
-      driverShifts: true,
     },
   });
 
   const results = [];
 
   for (const driver of drivers) {
-    const availability = await checkDriverAvailability(driver.id, pickupDate, dropDate);
+    const availability = await checkDriverAvailability(driver.id, pickupDate, dropDate, options);
     if (availability.available) {
       results.push({
         id: driver.id,

@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { STAFF_ROLES } from "@/lib/authz-roles";
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -29,7 +30,8 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  const adminRoles = ["SUPER_ADMIN", "ADMIN", "CONTENT_MANAGER", "BOOKING_MANAGER", "FLEET_MANAGER", "DRIVER_MANAGER", "SUPPORT_EXECUTIVE"];
+  // All back-office roles (see STAFF_ROLES in src/lib/authz-roles.ts). FINANCE was previously missing.
+  const adminRoles = STAFF_ROLES;
 
   // Admin Login route
   if (pathname === "/admin/login") {

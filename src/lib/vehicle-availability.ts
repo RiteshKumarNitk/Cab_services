@@ -1,4 +1,9 @@
 import { prisma } from "./prisma";
+import { ACTIVE_ASSIGNMENT_STATUSES, bookingWindow } from "./booking-lifecycle";
+import type { BookingStatus, Prisma } from "@prisma/client";
+
+/** Prisma client or interactive-transaction client. */
+export type Db = Prisma.TransactionClient;
 
 export interface VehicleAvailabilityCheck {
   available: boolean;
@@ -13,60 +18,74 @@ export interface VehicleAvailabilityCheck {
   };
 }
 
+/** Bookings (other than `excludeBookingId`) whose assignment window overlaps [start, end]. */
+export function overlappingBookingsWhere(
+  window: { start: Date; end: Date },
+  excludeBookingId?: string
+): Prisma.BookingWhereInput {
+  return {
+    ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+    status: { in: ACTIVE_ASSIGNMENT_STATUSES as BookingStatus[] },
+    pickupDate: { lte: window.end },
+    OR: [
+      { returnDate: null, pickupDate: { gte: window.start } },
+      { returnDate: { gte: window.start } },
+    ],
+  };
+}
+
 export async function checkVehicleAvailability(
   vehicleId: string,
   pickupDate: Date,
-  dropDate?: Date
+  dropDate?: Date,
+  excludeBookingId?: string,
+  db: Db = prisma
 ): Promise<VehicleAvailabilityCheck> {
-  const vehicle = await prisma.vehicle.findUnique({
+  const window = bookingWindow(pickupDate, dropDate);
+
+  const vehicle = await db.vehicle.findUnique({
     where: { id: vehicleId },
     include: {
       maintenance: {
         where: {
           status: { in: ["SCHEDULED", "IN_PROGRESS"] },
-          scheduledDate: { lte: dropDate || pickupDate },
+          scheduledDate: { lte: window.end },
         },
       },
     },
   });
 
-  if (!vehicle) {
+  if (!vehicle || !vehicle.isActive || vehicle.status === "INACTIVE") {
     return {
       available: false,
-      reason: "Vehicle not found",
+      reason: vehicle ? "Vehicle unavailable: inactive" : "Vehicle not found",
       checks: { booked: true, maintenance: true, insuranceValid: true, fitnessValid: true, permitValid: true, rcValid: true },
     };
   }
 
-  const endDate = dropDate || pickupDate;
-
-  // Check 1: Existing bookings in same timeframe
-  const conflictingBookings = await prisma.booking.findMany({
-    where: {
-      vehicleId,
-      status: { notIn: ["CANCELLED", "CLOSED", "TRIP_COMPLETED"] },
-      OR: [
-        { pickupDate: { gte: pickupDate, lte: endDate } },
-        { pickupDate: { lte: pickupDate }, returnDate: { gte: pickupDate } },
-      ],
-    },
-  });
-  const isBooked = conflictingBookings.length > 0;
+  // Check 1: Other bookings holding this vehicle in an overlapping window,
+  // including dispatches where the vehicle is assigned but not yet dispatched.
+  const [conflictingBookings, conflictingDispatches] = await Promise.all([
+    db.booking.count({ where: { vehicleId, ...overlappingBookingsWhere(window, excludeBookingId) } }),
+    db.dispatch.count({
+      where: {
+        vehicleId,
+        status: { not: "DISPATCHED" },
+        booking: overlappingBookingsWhere(window, excludeBookingId),
+      },
+    }),
+  ]);
+  const isBooked = conflictingBookings + conflictingDispatches > 0;
 
   // Check 2: Scheduled maintenance
-  const hasMaintenance = vehicle.maintenance.length > 0;
+  const hasMaintenance = vehicle.maintenance.length > 0 || vehicle.status === "MAINTENANCE";
 
-  // Check 3: Insurance
-  const insuranceValid = !vehicle.insuranceExpiry || vehicle.insuranceExpiry > new Date();
-
-  // Check 4: Fitness
-  const fitnessValid = !vehicle.fitnessExpiry || vehicle.fitnessExpiry > new Date();
-
-  // Check 5: Permit
-  const permitValid = !vehicle.permitExpiry || vehicle.permitExpiry > new Date();
-
-  // Check 6: RC
-  const rcValid = !vehicle.rcExpiry || vehicle.rcExpiry > new Date();
+  // Checks 3-6: documents must be valid for the whole trip, not just today
+  const validThrough = (expiry: Date | null) => !expiry || expiry > window.end;
+  const insuranceValid = validThrough(vehicle.insuranceExpiry);
+  const fitnessValid = validThrough(vehicle.fitnessExpiry);
+  const permitValid = validThrough(vehicle.permitExpiry);
+  const rcValid = validThrough(vehicle.rcExpiry);
 
   const failedChecks: string[] = [];
   if (isBooked) failedChecks.push("already booked");
@@ -95,30 +114,21 @@ export async function checkVehicleAvailability(
 export async function findAvailableVehicles(
   pickupDate: Date,
   dropDate?: Date,
-  vehicleType?: string
+  vehicleType?: string,
+  excludeBookingId?: string
 ) {
   const whereVehicle: Record<string, unknown> = {
     isActive: true,
-    status: "AVAILABLE",
+    status: { notIn: ["INACTIVE", "MAINTENANCE"] },
   };
   if (vehicleType) whereVehicle.type = vehicleType;
 
-  const vehicles = await prisma.vehicle.findMany({
-    where: whereVehicle,
-    include: {
-      maintenance: {
-        where: {
-          status: { in: ["SCHEDULED", "IN_PROGRESS"] },
-          scheduledDate: { lte: dropDate || pickupDate },
-        },
-      },
-    },
-  });
+  const vehicles = await prisma.vehicle.findMany({ where: whereVehicle });
 
   const results = [];
 
   for (const vehicle of vehicles) {
-    const availability = await checkVehicleAvailability(vehicle.id, pickupDate, dropDate);
+    const availability = await checkVehicleAvailability(vehicle.id, pickupDate, dropDate, excludeBookingId);
     if (availability.available) {
       results.push({
         id: vehicle.id,

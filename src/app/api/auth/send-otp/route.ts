@@ -11,8 +11,11 @@ export async function POST(request: Request) {
   const otp = generateOtp();
   storeOtp(phone, otp, name);
 
-  // In production, send via SMS gateway (Twilio, MSG91, etc.)
-  console.log(`[OTP] To ${phone}: Your OTP is ${otp}. Valid for 10 minutes.`);
+  // BLOCKED: no SMS gateway is configured, so the OTP is not delivered to the customer.
+  // It is only logged in development; never log OTPs in production.
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[OTP] To ${phone}: Your OTP is ${otp}. Valid for 10 minutes.`);
+  }
 
   return NextResponse.json({
     success: true,

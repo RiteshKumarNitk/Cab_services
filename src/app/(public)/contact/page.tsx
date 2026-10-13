@@ -11,12 +11,31 @@ export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (submitting) return;
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    setSubmitting(false);
-    setSubmitted(true);
+    setError("");
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...Object.fromEntries(new FormData(e.currentTarget)), department: "contact" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const firstFieldError = data.fields ? Object.values(data.fields)[0] : null;
+        setError((firstFieldError as string) || data.error || "Could not send your message. Please try again.");
+        return;
+      }
+      setSubmitted(true);
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -46,20 +65,20 @@ export default function ContactPage() {
                 <div className="grid sm:grid-cols-2 gap-5">
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
-                    <Input id="name" required className="h-11 rounded-xl border-gray-200 bg-gray-50" placeholder="Your name" />
+                    <Input id="name" name="name" autoComplete="name" required className="h-11 rounded-xl border-gray-200 bg-gray-50" placeholder="Your name" />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="phone">Phone Number</Label>
-                    <Input id="phone" type="tel" className="h-11 rounded-xl border-gray-200 bg-gray-50" placeholder="Your phone" />
+                    <Input id="phone" name="phone" type="tel" autoComplete="tel" className="h-11 rounded-xl border-gray-200 bg-gray-50" placeholder="Your phone" />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email Address</Label>
-                  <Input id="email" type="email" required className="h-11 rounded-xl border-gray-200 bg-gray-50" placeholder="your@email.com" />
+                  <Input id="email" name="email" type="email" autoComplete="email" required className="h-11 rounded-xl border-gray-200 bg-gray-50" placeholder="your@email.com" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="subject">Subject</Label>
-                  <select id="subject" className="flex h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                  <select id="subject" name="subject" className="flex h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
                     <option>Booking Inquiry</option>
                     <option>Tour Package</option>
                     <option>Corporate Travel</option>
@@ -69,8 +88,10 @@ export default function ContactPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="message">Message</Label>
-                  <textarea id="message" required rows={5} className="flex w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none" placeholder="How can we help you?" />
+                  <textarea id="message" name="message" required minLength={5} rows={5} className="flex w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none" placeholder="How can we help you?" />
                 </div>
+                <input type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" />
+                {error && <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl p-3" role="alert">{error}</p>}
                 <Button type="submit" className="w-full h-12 rounded-xl bg-red-700 hover:bg-red-800 text-white" disabled={submitting}>
                   {submitting ? "Sending..." : <><Send className="h-4 w-4 mr-2" /> Send Message</>}
                 </Button>

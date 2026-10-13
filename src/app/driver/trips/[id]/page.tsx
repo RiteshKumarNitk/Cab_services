@@ -30,7 +30,6 @@ import {
   Car,
   PlayCircle,
   CheckCircle,
-  XCircle,
   KeyRound,
   FileText,
   AlertTriangle,
@@ -47,7 +46,6 @@ export default function TripDetailPage() {
   const updateStatus = useUpdateBookingStatus();
 
   const [otpInput, setOtpInput] = useState("");
-  const [otpVerified, setOtpVerified] = useState(false);
   const [driverNotes, setDriverNotes] = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
 
@@ -65,20 +63,20 @@ export default function TripDetailPage() {
   }, [booking]);
 
   const handleUpdateStatus = async (newStatus: string) => {
-    try {
-      await updateStatus.mutateAsync({ id, status: newStatus });
-      toast.success("Trip status updated successfully");
-    } catch {
-      toast.error("Failed to update trip status");
+    // Starting a trip requires the customer's OTP; the server verifies it.
+    if (newStatus === "TRIP_STARTED" && otpInput.trim().length === 0) {
+      toast.error("Enter the OTP from the customer to start the trip");
+      return;
     }
-  };
-
-  const handleVerifyOtp = () => {
-    if (otpInput === booking?.trip?.otp) {
-      setOtpVerified(true);
-      toast.success("OTP verified successfully");
-    } else {
-      toast.error("Invalid OTP");
+    try {
+      await updateStatus.mutateAsync({
+        id,
+        status: newStatus,
+        otp: newStatus === "TRIP_STARTED" ? otpInput.trim() : undefined,
+      });
+      setOtpInput("");
+    } catch {
+      // error toast is shown by the mutation hook
     }
   };
 
@@ -246,16 +244,6 @@ export default function TripDetailPage() {
                   {nextAction.label}
                 </Button>
               )}
-              {!terminalStatuses.includes(booking.status) && (
-                <Button
-                  variant="outline"
-                  className="w-full text-red-600"
-                  onClick={() => handleUpdateStatus("CANCELLED")}
-                >
-                  <XCircle className="h-5 w-5 mr-2" />
-                  Cancel Trip
-                </Button>
-              )}
               {!nextAction && !terminalStatuses.includes(booking.status) && (
                 <p className="text-sm text-gray-500 text-center py-2">
                   No actions available for current status
@@ -273,46 +261,28 @@ export default function TripDetailPage() {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* OTP */}
-          {trip?.otp && !terminalStatuses.includes(booking.status) && (
+          {trip && nextAction?.nextStatus === "TRIP_STARTED" && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <KeyRound className="h-5 w-5" />
-                  OTP Verification
+                  Customer OTP
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="text-center">
-                  <p className="text-3xl font-bold tracking-widest text-blue-600">
-                    {otpVerified ? trip.otp : "****"}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Share this OTP with the customer
-                  </p>
-                </div>
-                <Separator />
-                <div className="space-y-2">
-                  <Label htmlFor="otp-input">Verify Customer OTP</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="otp-input"
-                      value={otpInput}
-                      onChange={(e) => setOtpInput(e.target.value)}
-                      placeholder="Enter OTP"
-                      maxLength={6}
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={handleVerifyOtp}
-                      disabled={otpInput.length === 0 || otpVerified}
-                    >
-                      Verify
-                    </Button>
-                  </div>
-                  {otpVerified && (
-                    <p className="text-xs text-green-600">OTP verified successfully</p>
-                  )}
-                </div>
+              <CardContent className="space-y-2">
+                <Label htmlFor="otp-input">Ask the customer for their trip OTP</Label>
+                <Input
+                  id="otp-input"
+                  value={otpInput}
+                  onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ""))}
+                  placeholder="Enter OTP"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                />
+                <p className="text-xs text-gray-500">
+                  The customer sees this OTP in their booking. It is checked when you tap Start Trip.
+                </p>
               </CardContent>
             </Card>
           )}

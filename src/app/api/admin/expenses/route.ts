@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const FINANCE_ROLES = ["SUPER_ADMIN", "ADMIN", "FINANCE"];
+import { FINANCE_ROLES, FINANCE_READ_ROLES, hasRole } from "@/lib/authz";
+
+// Permission matrix: fleet managers and finance manage expenses; ops managers read.
+const READ_ROLES = [...FINANCE_READ_ROLES, "FLEET_MANAGER"];
 
 const VALID_CATEGORIES = ["FUEL", "MAINTENANCE", "TOLL", "PARKING", "DRIVER_ALLOWANCE", "PERMIT", "OTHER"];
 
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!hasRole(session.user.role, READ_ROLES)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const category = searchParams.get("category");

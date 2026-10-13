@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { calculateFare, haversineDistance } from "@/lib/utils";
+import { BookingStatus, BookingType } from "@prisma/client";
+import { enquirySchema, fieldErrors } from "@/lib/enquiry-validation";
+import { createEnquiryLead } from "@/lib/enquiries";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -23,8 +25,12 @@ export async function GET(req: Request) {
       where.driverId = session.user.id;
     }
 
-    if (status) where.status = status;
-    if (type) where.bookingType = type;
+    // `status` may be a comma-separated list (e.g. the driver app asks for TRIP_STARTED,READY_FOR_DISPATCH).
+    if (status) {
+      const statuses = status.split(",").map((s) => s.trim()).filter((s) => s in BookingStatus);
+      where.status = { in: statuses };
+    }
+    if (type && type in BookingType) where.bookingType = type;
 
     const bookings = await prisma.booking.findMany({
       where,
@@ -47,6 +53,14 @@ export async function GET(req: Request) {
   }
 }
 
+/**
+ * Customer booking request.
+ *
+ * Bookings are only created from an approved quotation (Lead -> Quotation -> Booking), so a
+ * customer request is recorded as an enquiry Lead for the sales team. Previously this endpoint
+ * created a PENDING booking directly and auto-assigned the nearest online driver without any
+ * availability check, bypassing the whole pipeline.
+ */
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id || session.user.role !== "CUSTOMER") {
@@ -55,128 +69,47 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const {
-      bookingType,
-      pickupAddress,
-      dropAddress,
-      pickupLat,
-      pickupLng,
-      dropLat,
-      dropLng,
-      vehicleType,
-      scheduledTime,
-      flightNumber,
-      paymentMethod,
-    } = body;
+    const customer = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { name: true, phone: true, email: true },
+    });
 
-    // Validate required fields
-    if (!bookingType || !pickupAddress) {
+    const parsed = enquirySchema.safeParse({
+      name: customer?.name ?? "",
+      phone: body.phone ?? customer?.phone ?? "",
+      email: customer?.email ?? "",
+      pickupAddress: body.pickupAddress,
+      dropAddress: body.dropAddress,
+      pickupDate: body.pickupDate ?? body.scheduledTime,
+      returnDate: body.returnDate,
+      tripType: body.tripType,
+      bookingType: body.bookingType,
+      passengers: body.passengers,
+      preferredVehicle: body.vehicleType,
+      notes: [body.notes, body.flightNumber && `Flight: ${body.flightNumber}`].filter(Boolean).join("\n") || undefined,
+    });
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Booking type and pickup address are required" },
+        { error: "Please correct the highlighted fields", fields: fieldErrors(parsed.error) },
         { status: 400 }
       );
     }
 
-    // Get pricing
-    const pricing = await prisma.pricing.findUnique({
-      where: { vehicleType: vehicleType || "SEDAN" },
+    const { lead, duplicate } = await createEnquiryLead(parsed.data, {
+      source: "WEBSITE", // existing Lead.source values: WEBSITE, PHONE, WALKIN, REFERRAL, SOCIAL_MEDIA, OTHER
+      userId: session.user.id,
     });
 
-    if (!pricing) {
-      return NextResponse.json(
-        { error: "Pricing not configured for this vehicle type" },
-        { status: 400 }
-      );
-    }
-
-    // Calculate distance if coordinates provided
-    let distance: number | null = null;
-    if (pickupLat && pickupLng && dropLat && dropLng) {
-      distance = haversineDistance(pickupLat, pickupLng, dropLat, dropLng);
-    }
-
-    // Calculate fare
-    const duration = distance ? Math.ceil((distance / 30) * 60) : 30; // rough estimate
-    const { fare } = calculateFare({
-      vehicleType: vehicleType || "SEDAN",
-      bookingType,
-      distance: distance || undefined,
-      duration,
-      pricing,
-    });
-
-    // Find nearest online driver
-    let driverId: string | null = null;
-    let vehicleId: string | null = null;
-
-    const onlineDrivers = await prisma.driverStatus.findMany({
-      where: { online: true },
-      include: {
-        driver: {
-          include: {
-            driverVehicles: { where: { isActive: true, type: vehicleType || "SEDAN" } },
-          },
-        },
+    return NextResponse.json(
+      {
+        reference: lead.leadNumber,
+        duplicate,
+        message: "Request received. Our team will send you a quotation shortly.",
       },
-    });
-
-    if (onlineDrivers.length > 0) {
-      let nearestDriver: (typeof onlineDrivers)[0] | null = null;
-      let minDistance = Infinity;
-
-      for (const ds of onlineDrivers) {
-        if (ds.lat && ds.lng && pickupLat && pickupLng) {
-          const dist = haversineDistance(pickupLat, pickupLng, ds.lat, ds.lng);
-          if (dist < minDistance) {
-            minDistance = dist;
-            nearestDriver = ds;
-          }
-        }
-      }
-
-      // If no coordinates, pick first available driver
-      if (!nearestDriver) {
-        nearestDriver = onlineDrivers[0];
-      }
-
-      driverId = nearestDriver.driverId;
-      const vehicle = nearestDriver.driver.driverVehicles[0];
-      if (vehicle) {
-        vehicleId = vehicle.id;
-      }
-    }
-
-    // Create booking
-    const booking = await prisma.booking.create({
-      data: {
-        customerId: session.user.id,
-        driverId,
-        vehicleId,
-        bookingType,
-        pickupAddress,
-        dropAddress: dropAddress || "",
-        pickupLat: pickupLat || null,
-        pickupLng: pickupLng || null,
-        dropLat: dropLat || null,
-        dropLng: dropLng || null,
-        flightNumber: flightNumber || null,
-        scheduledTime: scheduledTime ? new Date(scheduledTime) : null,
-        fare,
-        distance,
-        duration,
-        paymentMethod: paymentMethod || "CASH",
-        status: "PENDING",
-      },
-      include: {
-        customer: { select: { id: true, name: true, phone: true } },
-        driver: { select: { id: true, name: true, phone: true } },
-        vehicle: true,
-      },
-    });
-
-    return NextResponse.json(booking, { status: 201 });
+      { status: duplicate ? 200 : 201 }
+    );
   } catch (error) {
-    console.error("Error creating booking:", error);
+    console.error("Error creating booking request:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

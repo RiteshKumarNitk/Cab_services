@@ -1,16 +1,24 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { ADMIN_ROLES, OPS_ROLES, hasRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { Role } from "@prisma/client";
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  const roleFilter = new URL(req.url).searchParams.get("role");
+  // Ops managers have read access to the driver list (dispatch board); full user list is admin-only.
+  const canRead =
+    hasRole(session?.user?.role, ADMIN_ROLES) ||
+    (roleFilter === "DRIVER" && hasRole(session?.user?.role, OPS_ROLES));
+  if (!canRead) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const users = await prisma.user.findMany({
+      where: roleFilter && roleFilter in Role ? { role: roleFilter as Role } : undefined,
       select: {
         id: true,
         email: true,
@@ -46,7 +54,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session || !hasRole(session.user?.role, ADMIN_ROLES)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

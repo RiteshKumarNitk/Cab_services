@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { ADMIN_ROLES, OPS_ROLES, hasRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  // Permission matrix: Ops managers and fleet managers can read vehicles.
+  if (!hasRole(session?.user?.role, OPS_ROLES)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -33,7 +35,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session || !hasRole(session.user?.role, ADMIN_ROLES)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

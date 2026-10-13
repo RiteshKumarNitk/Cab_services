@@ -19,7 +19,7 @@ export default function CustomerTripDetails() {
   const router = useRouter();
   const bookingId = params.id as string;
 
-  const { data: booking, isLoading } = useQuery({
+  const { data: booking, isLoading, refetch } = useQuery({
     queryKey: ["booking", bookingId],
     queryFn: () => fetch(`/api/bookings/${bookingId}`).then(res => res.json()),
   });
@@ -30,14 +30,26 @@ export default function CustomerTripDetails() {
   const isQuotation = booking.status === "QUOTE_SENT" || booking.status === "PRICE_SENT";
   const canConfirm = booking.status === "QUOTE_SENT" || booking.status === "PRICE_SENT" || booking.status === "QUOTE_PREPARING";
 
+  const updateStatus = async (status: string) => {
+    const res = await fetch(`/api/bookings/${bookingId}/status`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || "Could not update the booking. Please contact support.");
+    }
+    await refetch();
+  };
+
+  // Trip OTP: shown to the customer until the driver starts the trip.
+  const tripOtp: string | null =
+    booking.trip?.otp && ["READY_FOR_DISPATCH", "VEHICLE_READY"].includes(booking.status) ? booking.trip.otp : null;
+
   const handleConfirm = async () => {
     try {
-      await fetch(`/api/bookings/${bookingId}/status`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "QUOTE_ACCEPTED" }),
-      });
-      router.refresh();
+      await updateStatus("QUOTE_ACCEPTED");
     } catch (err) {
       console.error("Failed to confirm:", err);
     }
@@ -46,12 +58,7 @@ export default function CustomerTripDetails() {
   const handleCancel = async () => {
     if (!confirm("Are you sure you want to cancel this booking?")) return;
     try {
-      await fetch(`/api/bookings/${bookingId}/status`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "CANCELLED" }),
-      });
-      router.refresh();
+      await updateStatus("CANCELLED");
     } catch (err) {
       console.error("Failed to cancel:", err);
     }
@@ -97,6 +104,13 @@ export default function CustomerTripDetails() {
               )}
 
               <div className="mt-6 space-y-3">
+                {tripOtp && (
+                  <div className="p-3 bg-violet-50 rounded-lg border border-violet-100">
+                    <p className="text-sm text-violet-800 font-medium">Your trip OTP</p>
+                    <p className="text-2xl font-mono font-bold tracking-widest text-violet-700 mt-1">{tripOtp}</p>
+                    <p className="text-xs text-violet-600 mt-1">Share it with your driver only when you board.</p>
+                  </div>
+                )}
                 {isQuotation && (
                   <div className="p-3 bg-blue-50 rounded-lg">
                     <p className="text-sm text-blue-800 font-medium">Quotation Ready</p>

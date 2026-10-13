@@ -1,0 +1,193 @@
+# Aradhana Travel: Project Status
+
+**Audit date:** 2026-10-13
+**Audited commit:** `531f46e` on `master`, plus the uncommitted Phase 2 changes described in [§6](#6-changes-made-in-this-session-phase-2)
+**Requirements:** [PRODUCT_SPECIFICATION.md](PRODUCT_SPECIFICATION.md) (ERP) and [WEBSITE_DESIGN.md](WEBSITE_DESIGN.md) (public website)
+**Related:** [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [TESTING_STATUS.md](TESTING_STATUS.md)
+
+Every status below comes from reading the code. The database could not be reached from the audit machine, so **no workflow has been run end to end against real data**. That means no item is marked `COMPLETE` (verified against acceptance criteria). The best rating a working feature can get here is "implemented (code-verified)". There is no completion percentage, because there is no weighted, runtime-verified inventory to calculate one from.
+
+---
+
+## 1. Technology stack
+
+| Layer | Technology | Evidence |
+|---|---|---|
+| Framework | Next.js **16.2.10** (App Router, Turbopack), React 19.2 | `package.json` |
+| Language | TypeScript 5 (strict type-check passes) | `tsconfig.json` |
+| Database | PostgreSQL on Neon, via Prisma **5.22** | `prisma/schema.prisma` (43 models, 17 enums) |
+| Schema management | `prisma db push` style. **There is no `prisma/migrations` directory** | `prisma/` contains only `schema.prisma` and `seed.ts` |
+| Auth | NextAuth v5 beta (credentials and phone OTP), JWT sessions | `src/lib/auth.ts` |
+| UI | Tailwind 4, shadcn/base-ui, lucide, framer-motion, sonner, recharts | `package.json` |
+| Data fetching | TanStack Query (client), server components with Prisma (server), server actions (CMS) | `src/lib/hooks.ts`, `src/lib/admin-cms.ts` |
+| Validation | `zod` 4 (installed; first used in this session for enquiries and contact) | `src/lib/enquiry-validation.ts` |
+| Tests | None before this session. Now `node:test` through `tsx` | `src/lib/__tests__/` |
+| CI / deploy config | **None** (no `.github/`, no `vercel.json`, no Dockerfile) | repo root |
+
+Environment variables (names only): `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`. They are in `.env` and `.env.local`, which are git-ignored.
+
+### Role mapping (spec persona → schema `Role`)
+
+The schema roles do not match the spec personas one to one. Current code treats them like this (see `src/lib/authz-roles.ts`):
+
+| Spec persona | Schema role(s) used in code |
+|---|---|
+| Super Admin / Admin | `SUPER_ADMIN`, `ADMIN` |
+| Operations Manager | `BOOKING_MANAGER` (plus `FLEET_MANAGER` and `DRIVER_MANAGER` in `OPS_ROLES`) |
+| Sales Executive | `SUPPORT_EXECUTIVE` (CRM and quotations, but **cannot convert** leads) |
+| Fleet Manager / Driver Manager | `FLEET_MANAGER` / `DRIVER_MANAGER` |
+| Finance Executive | `FINANCE` |
+| (not in spec) | `CONTENT_MANAGER` (CMS only) |
+| Driver / Customer | `DRIVER` / `CUSTOMER` |
+
+This mapping is an assumption. It needs to be confirmed (decision **D1** in the plan).
+
+---
+
+## 2. Check results
+
+| Check | Command | Before (baseline) | After this session |
+|---|---|---|---|
+| Type-check | `tsc --noEmit` | ✅ pass | ✅ pass |
+| Lint | `eslint src` | ❌ 26 errors, 181 warnings | ❌ 25 errors, 172 warnings (all remaining errors existed before; none were introduced) |
+| Unit tests | `npm test` | n/a (no tests existed) | ✅ 38 passed, 0 failed |
+| Production build | `next build` | ✅ exit 0, with a `middleware` deprecation warning | ✅ exit 0, no deprecation warning |
+| DB-backed tests / E2E | n/a | ❌ **could not run**: no DB reachable, no test DB, no E2E tooling | ❌ still cannot run |
+
+Build caveat: during `next build` every prerendered CMS page logged `PrismaClientInitializationError: Can't reach database server`. The build still exits 0 and **caches empty CMS content** for static pages (ISR revalidates every 1h). A deploy built without DB access will serve empty CMS sections until revalidation.
+
+Full details: [TESTING_STATUS.md](TESTING_STATUS.md).
+
+---
+
+## 3. Feature inventory
+
+Status key: `IMPLEMENTED*` means code-verified only, not run against a database · `PARTIAL` · `STUB` · `MOCK` · `MISSING` · `BLOCKED`.
+"Fixed" means the problem was corrected in this session (§6).
+
+### 3.1 Core pipeline (spec §4)
+
+| Step | Status | Evidence |
+|---|---|---|
+| Website enquiry → Lead | `IMPLEMENTED*` (was `MOCK`) | The homepage `TripRequestForm` was a `setTimeout`, so nothing was saved. Fixed: `POST /api/enquiries` validates, de-duplicates within 24h and creates a `NEW` lead with source `WEBSITE`. |
+| Lead workspace, follow-ups, lead scoring | `IMPLEMENTED*` | `admin/leads/[id]`, `/api/admin/leads`, `/api/admin/followups` (follow-up outcomes update lead status) |
+| Quotation with pricing calculator | `PARTIAL` | Calculator and status buttons exist in `admin/quotations/[id]`. Status changes are not validated (any status → any status), and pricing can be edited after approval. "Send" only flips the status: nothing is delivered to the customer. |
+| Customer approval of quotation | `PARTIAL` | Only staff can approve. The customer portal cannot see pre-booking quotations (`/api/quotations?customerOnly` only returns quotations already linked to a booking). |
+| Approved quotation → Booking | `IMPLEMENTED*` (fixed) | Was not idempotent, not transactional, fell back to the **admin's own user id** as the customer when the lead had no email, and dropped `returnDate`. A second server-action path skipped the approved-quotation rule. Now one service, `src/lib/lead-conversion.ts`, used by both. |
+| Booking → Operations queue (Dispatch entry) | `IMPLEMENTED*` | Created in the same transaction as the booking |
+| Vehicle availability and assignment | `IMPLEMENTED*` (fixed) | Overlaps were missed (assignments held on `Dispatch` were ignored, and the current booking conflicted with itself). Documents were only checked against "now". |
+| Driver availability and assignment | `IMPLEMENTED*` (was **broken**) | An operator-precedence bug (`dropTime.getTime() - pickupDate.getTime() / 60000`) made **every driver assignment fail** with "would exceed max hours". Any trip that never reached `COMPLETED` also blocked its driver permanently. Fixed. |
+| Dispatch finalize → Trip creation | `IMPLEMENTED*` (fixed) | Double-clicking created duplicate trips (or a 500 error). Writes were not transactional. No trip OTP was generated. Now locked, transactional and idempotent. |
+| Booking status during dispatch | `IMPLEMENTED*` (fixed) | Booking status was never moved to `VEHICLE_ASSIGNED` or `DRIVER_ASSIGNED`. It is now synced by the dispatch service. |
+| Trip execution (start/pickup/drop/complete) | `IMPLEMENTED*` (fixed) | `Trip.status` was never updated (stayed `SCHEDULED` forever). The OTP was compared in the browser and the driver could read it from the API. Customers could mark their own trip completed and closed. All fixed server-side. |
+| Driver expenses and incidents | `IMPLEMENTED*` (driver side) / `MISSING` (admin review UI for incidents) | `/api/driver/expenses`, `/api/driver/incidents`. No admin incident screen. |
+| Invoice on trip completion | `MISSING` | Spec says invoices are auto-generated by an event subscriber. No such subscriber exists. Invoices are manual only. |
+| Payments | `IMPLEMENTED*` (fixed) | No input validation, no duplicate guard, invoice balance never updated. Fixed. |
+| Invoices | `PARTIAL` (fixed in part) | The UI sent the customer's **name** as `customerId` (FK violation, so creation failed for any booking with a customer). The API accepted a client-supplied `paidAmount` (marking money received without a payment) and allowed duplicate invoices per booking. Fixed. No PDF or receipt output, and no send. |
+| Driver settlements | `PARTIAL` | Manual entry of earnings, advance and expenses. Not calculated from persisted trips and expenses (spec §4D). No duplicate protection. |
+| Post-trip rating | `IMPLEMENTED*` (fixed) | Only accepted the legacy `COMPLETED` status, so pipeline bookings could never be rated. The client could also rate any user id. Fixed. |
+
+### 3.2 ERP modules (spec §1)
+
+| Module | Status | Evidence / gap |
+|---|---|---|
+| Ops dashboard | `PARTIAL` | `getOperationsDashboard()` uses real aggregates. "Drops today" actually counts all in-progress bookings. There are no urgent alerts for document expiry or overdue invoices (spec §5.6). |
+| Dispatch board | `IMPLEMENTED*` (fixed) | Five lanes. Failed assignments used to be silent, the vehicle and driver lists returned 401 for anyone but `ADMIN` (so the board broke for ops managers), and the driver dropdown listed **all users**, customers included. Fixed. The "Delayed" lane uses age since dispatch creation, not since the last state change. |
+| Calendar | `IMPLEMENTED*` | `/api/admin/calendar` (bookings / vehicles / drivers views) |
+| Bookings list and workspace | `PARTIAL` | The workspace has no Payments, Docs, Activity or Comm tabs (spec §5.1). The list has a "mark paid" action that sets `paymentStatus=PAID` **without recording a payment** (decision D5). |
+| Trips list and detail | `PARTIAL` | `PATCH /api/admin/trips/[id]` lets ops set any trip status, vehicle or driver with no lifecycle or availability checks. `DELETE` hard-deletes trips. |
+| Customers (CRM) | `PARTIAL` | List and profile exist. Customer workspace says "Booking history coming soon". No Comm or Notes tabs. |
+| Follow-ups | `IMPLEMENTED*` | |
+| Fleet: vehicles | `IMPLEMENTED*` | CRUD is `ADMIN`/`SUPER_ADMIN` only (the spec gives Fleet Manager CRUD) |
+| Fleet: maintenance | `STUB` | `admin/maintenance` is a "Coming Soon" page. The `VehicleMaintenance` model exists and is used by availability checks and the calendar. |
+| Fleet: fuel / expenses | `PARTIAL` | `admin/fleet/fuel` reads `/api/admin/expenses?type=FUEL`, but the API filters on `category`, so the `type` parameter is ignored. |
+| Fleet: documents and expiry alerts | `PARTIAL` | Expiry dates are enforced at assignment. No alerts or notifications. |
+| Drivers workspace | `PARTIAL` | List and edit only. No attendance, leave, shifts, trips, ratings or incidents tabs (spec §5.5). `DriverLeave` and `DriverShift` have **no admin API or UI** but are enforced by availability checks. |
+| Finance dashboard / reports | `IMPLEMENTED*` | Server components with Prisma aggregates |
+| Refunds | `PARTIAL` | `REFUND` payment type only. No refund workflow. |
+| Reports (8 report pages, CSV export) | `IMPLEMENTED*` (fixed) | **CSV export was open to any logged-in user**, customers included (all leads and customer PII). Fixed. |
+| CMS (homepage, fleet, pricing, nav, pages, FAQ, testimonials, gallery, blog, contacts, settings) | `IMPLEMENTED*` | Server actions with role checks in `src/lib/admin-cms.ts` |
+| Settings: organization, roles | `STUB` | `admin/settings` is "Coming Soon" |
+| Settings: webhooks | `IMPLEMENTED*` | Delivery only works now that the event system is initialized (fixed) |
+| Audit log | `IMPLEMENTED*` (was effectively `MISSING`) | `initEventSystem()` was **never called**, so no audit rows, notifications or webhooks were ever produced. Fixed: initialized lazily on first event. |
+| Notifications | `PARTIAL` | In-app DB rows only (`channel: PUSH`). **No UI reads them** (`/api/notifications` has no caller). No email, SMS or WhatsApp provider is configured, so external channels are `BLOCKED`. |
+
+### 3.3 Driver app and customer portal
+
+| Area | Status | Evidence / gap |
+|---|---|---|
+| Driver trip page (start with OTP, pickup, drop, complete, notes) | `IMPLEMENTED*` (fixed) | |
+| Driver dashboard / rides list | `PARTIAL` | Contains legacy actions for statuses that don't exist in the enum (`REQUESTED`, `ACCEPTED`, so they are dead code) and `rides` uses legacy `STARTED`/`COMPLETED`. Drivers should use the trip page. |
+| Driver earnings | `PARTIAL` (misleading) | Sums `booking.fare`, which is the **customer's fare**, not the driver's pay. It should come from `Settlement`. Converted bookings now carry `fare = totalFare` (needed by the finance dialogs), so this page shows the customer fare for them too until P4-3 is done. |
+| Customer dashboard, bookings, history, invoices, profile, tracking | `IMPLEMENTED*` | Booking detail now shows the trip OTP (fixed) |
+| Customer quotations | `PARTIAL` | See quotation approval above |
+| Public "track / cancel / edit / reschedule / print / download" pages | `PARTIAL` / `STUB` | They call `/api/bookings/[id]`, which requires login. `edit` only updates `driverNotes`. `reschedule` sends a non-existent status `RESCHEDULED` (always 400). |
+
+### 3.4 Public website (WEBSITE_DESIGN.md)
+
+| Area | Status | Evidence / gap |
+|---|---|---|
+| Home, About, FAQ, Fleet, Pricing, Gallery, Blog, Testimonials, static pages | `IMPLEMENTED*` | CMS-backed through `src/lib/cms.ts` |
+| Services pages | `IMPLEMENTED*` | |
+| Tours, destinations | `MOCK` (static) | Hard-coded in `src/lib/tour-packages.ts` and `src/lib/destinations.ts`, including **prices, ratings and review counts** that need business verification |
+| Offers | `MOCK` (static) | Hard-coded offers with promo codes no system honours, and a "valid until Jul 31, 2026" that has **already expired** |
+| Contact form | `IMPLEMENTED*` (was `MOCK`) | It was a `setTimeout`. Now `POST /api/contact` writes to `ContactSubmission`, shown in Admin → CMS → Contacts. |
+| Feedback form | `IMPLEMENTED*` (was `MOCK`) | Same endpoint, `department: feedback` |
+| Customer login / register | `IMPLEMENTED*` (fixed) | See security findings |
+| Phone OTP delivery | `BLOCKED` | No SMS gateway. The OTP is only logged in development. **Phone login does not work in production** until a provider is configured. |
+| Online payments, maps / live tracking | `MISSING` (not in scope until a provider is chosen) | |
+
+---
+
+## 4. Security findings
+
+| # | Severity | Finding | Status |
+|---|---|---|---|
+| S1 | **Critical** | `POST /api/auth/register` accepted `role` from the body: **anyone could self-register as `SUPER_ADMIN`** | Fixed: only `CUSTOMER` or `DRIVER`, minimum password length 8 |
+| S2 | **Critical** | Universal OTP `000000` accepted in every environment, so **anyone could sign in as any user (including admins) knowing only their phone number** | Fixed: universal OTP only when `NODE_ENV !== "production"`; OTP sign-in limited to `CUSTOMER` accounts; 5-attempt limit; crypto-random codes |
+| S3 | High | Dispatch endpoints (assign vehicle/driver, finalize, list) only required "logged in". Customers and drivers could dispatch. | Fixed: `OPS_ROLES` |
+| S4 | High | Finance GET endpoints (payments, invoices, settlements, expenses) exposed all financial data and customer PII to any logged-in user | Fixed: finance read roles |
+| S5 | High | CSV report export open to any logged-in user | Fixed |
+| S6 | High | `/api/quotations` and `/api/invoices` returned **all** records to drivers | Fixed |
+| S7 | High | Booking status endpoint let customers mark their own trips started, completed and closed, and let managers bypass availability checks by passing `vehicleId`/`driverId` | Fixed: role-specific transitions; assignment states only via dispatch |
+| S8 | Medium | Trip OTP verified in the browser, and the driver received it in the API response | Fixed: server-side verification; OTP hidden from the driver |
+| S9 | Medium | `/api/drivers/available` exposed live driver names, phones and locations to customers | Fixed |
+| S10 | Medium | `PUT /api/bookings/[id]` (driver notes) could be called by any logged-in user on any booking | Fixed |
+| S11 | Medium | In-memory OTP and auth-token stores do not work across serverless instances | Open (P1-6 in the plan) |
+| S12 | Medium | No rate limiting on login, OTP or public forms (honeypot only) | Open |
+| S13 | Low | `README.md` lists seed credentials (`admin123`, …). Unsafe if the seed is ever run against production. | Open (D6) |
+| S14 | Low | Self-registered drivers are immediately active and assignable, with no vetting | Open (D4) |
+
+---
+
+## 5. Known bugs and risks (open)
+
+1. **No migrations.** The schema is applied without a migration history, so production schema changes cannot be reviewed or rolled back (plan P1-1).
+2. **Business rules not yet enforced:** quotation status transitions; editing an approved quotation's price; manual "mark paid" without a payment; `PATCH /api/admin/trips/[id]` bypasses lifecycle and availability; trip hard-delete.
+3. **Day-granularity assignment windows.** A vehicle or driver can hold one booking per calendar day, because bookings have no reliable end time. This is safe against double-booking but may under-use the fleet for short local trips (decision D3).
+4. **Timezone.** Day boundaries and shift checks use the server timezone. On a UTC host, IST midnight-to-05:30 falls on the previous day (plan P1-7).
+5. **Event delivery is in-process and fire-and-forget.** A crash after commit loses notifications and webhooks. There is no retry or outbox.
+6. **Driver online check** now applies only to trips starting today. The previous code blocked any future assignment for a driver who was offline at assignment time.
+7. Prerendered CMS pages can be cached empty if built without DB access (§2).
+8. Hard-coded marketing content (tours, destinations, offers) contains unverified prices and ratings and an expired offer.
+
+---
+
+## 6. Changes made in this session (Phase 2)
+
+| Area | Files |
+|---|---|
+| Shared authorization | `src/lib/authz.ts`, `src/lib/authz-roles.ts` (new) |
+| Booking lifecycle rules (pure, tested) | `src/lib/booking-lifecycle.ts` (new), `src/app/api/bookings/[id]/status/route.ts` |
+| Availability fixes | `src/lib/vehicle-availability.ts`, `src/lib/driver-availability.ts` |
+| Dispatch (transactions, locks, idempotency, OTP, status sync, events) | `src/lib/operations-queue.ts`, `src/app/api/admin/dispatch/**` |
+| Lead conversion (single path) | `src/lib/lead-conversion.ts` (new), `src/app/api/admin/leads/[id]/convert/route.ts`, `src/lib/admin-crm.ts` |
+| Finance integrity | `src/lib/finance.ts` (new), `src/app/api/admin/payments/route.ts`, `src/app/api/admin/invoices/route.ts`, `finance-dialogs.tsx` |
+| Auth hardening | `src/app/api/auth/{register,send-otp,verify-otp}/route.ts`, `src/lib/otp.ts`, `src/proxy.ts` (renamed from the deprecated `middleware.ts`; adds the `FINANCE` role, which was locked out of `/admin`) |
+| Endpoint permissions | admin users / vehicles / pricing / webhooks / audit / expenses / settlements / CSV, `/api/quotations`, `/api/invoices`, `/api/drivers/available`, `/api/bookings/[id]` |
+| Event system initialized | `src/lib/event-bus.ts`, `src/lib/audit-logger.ts`, `src/lib/notifications.ts` (driver dispatch notification) |
+| Website enquiries | `src/lib/enquiry-validation.ts`, `src/lib/enquiries.ts`, `src/app/api/enquiries/route.ts`, `src/app/api/contact/route.ts` (new); `TripRequestForm.tsx`, contact and feedback pages; `POST /api/bookings` now records an enquiry instead of creating an unvetted booking |
+| UI feedback | dispatch board, driver trip page (OTP entry), customer booking page (OTP display), `useUpdateBookingStatus` (no more false "success") |
+| Tests and scripts | `src/lib/__tests__/*.test.ts`, `package.json` (`test`, `typecheck`) |
+
+**API behaviour changes:** `POST /api/bookings` (customer) now returns `{ reference, duplicate, message }` and creates a Lead, not a Booking. Invoice `PATCH` can no longer set `paidAmount`, `paymentStatus` or `paidAt`. Finalize and convert return `200` with the existing record on repeat calls (still `201` on creation). Assigning a driver now requires a vehicle first (spec §8.2). Drivers can no longer cancel bookings (permission matrix: Bookings = R for Driver). No UI in the repo depended on the removed behaviours.

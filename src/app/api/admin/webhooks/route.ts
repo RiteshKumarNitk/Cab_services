@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { ADMIN_ROLES, hasRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session || !hasRole(session.user?.role, ADMIN_ROLES)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -24,7 +25,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session || !hasRole(session.user?.role, ADMIN_ROLES)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -59,7 +60,7 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session || !hasRole(session.user?.role, ADMIN_ROLES)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -95,7 +96,7 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN") {
+  if (!session || !hasRole(session.user?.role, ADMIN_ROLES)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

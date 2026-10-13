@@ -2,77 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { eventBus, createEvent } from "@/lib/event-bus";
-
-// Business process statuses (Sales → Operations → Execution)
-const validTransitions: Record<string, string[]> = {
-  // --- Sales Pipeline ---
-  NEW_LEAD: ["QUALIFIED", "CANCELLED"],
-  QUALIFIED: ["CONTACTED", "CANCELLED"],
-  CONTACTED: ["QUOTE_PREPARING", "CANCELLED"],
-  QUOTE_PREPARING: ["QUOTE_SENT", "CANCELLED"],
-  QUOTE_SENT: ["QUOTE_ACCEPTED", "CANCELLED"],
-  QUOTE_ACCEPTED: ["BOOKING_CONFIRMED", "CANCELLED"],
-
-  // --- Operations Pipeline ---
-  BOOKING_CONFIRMED: ["WAITING_ASSIGNMENT", "CANCELLED"],
-  WAITING_ASSIGNMENT: ["VEHICLE_ASSIGNED", "CANCELLED"],
-  VEHICLE_ASSIGNED: ["DRIVER_ASSIGNED", "CANCELLED"],
-  DRIVER_ASSIGNED: ["READY_FOR_DISPATCH", "CANCELLED"],
-
-  // --- Trip Execution ---
-  READY_FOR_DISPATCH: ["TRIP_STARTED", "CANCELLED"],
-  TRIP_STARTED: ["PICKUP_COMPLETED", "CANCELLED"],
-  PICKUP_COMPLETED: ["DROP_COMPLETED", "CANCELLED"],
-  DROP_COMPLETED: ["TRIP_COMPLETED", "CANCELLED"],
-
-  // --- Closure ---
-  TRIP_COMPLETED: ["INVOICE_GENERATED"],
-  INVOICE_GENERATED: ["CLOSED"],
-
-  // Terminal
-  CLOSED: [],
-  CANCELLED: [],
-
-  // Legacy mappings (for backward compat)
-  PENDING: ["PRICE_SENT", "CANCELLED"],
-  PRICE_SENT: ["CONFIRMED", "CANCELLED"],
-  CONFIRMED: ["WAITING_ASSIGNMENT", "CANCELLED"],
-  VEHICLE_READY: ["TRIP_STARTED", "CANCELLED"],
-  REQUESTED: ["ACCEPTED", "CANCELLED"],
-  ACCEPTED: ["TRIP_STARTED", "CANCELLED"],
-  STARTED: ["PICKUP_COMPLETED", "CANCELLED"],
-  COMPLETED: ["INVOICE_GENERATED"],
-};
-
-const MANAGER_ROLES = ["SUPER_ADMIN", "ADMIN", "BOOKING_MANAGER", "FLEET_MANAGER", "DRIVER_MANAGER"];
-
-// Statuses that require manager role to set
-const MANAGER_ONLY_SOURCES = [
-  "NEW_LEAD", "QUALIFIED", "QUOTE_PREPARING", "QUOTE_SENT",
-  "PENDING", "PRICE_SENT",
-  "BOOKING_CONFIRMED", "WAITING_ASSIGNMENT", "VEHICLE_ASSIGNED",
-  "DRIVER_ASSIGNED", "READY_FOR_DISPATCH",
-];
-
-// Customer-facing status mapping (hide internal ops statuses)
-const CUSTOMER_TIMELINE: Record<string, { label: string; order: number }> = {
-  NEW_LEAD: { label: "Request Submitted", order: 1 },
-  QUALIFIED: { label: "Being Reviewed", order: 2 },
-  QUOTE_PREPARING: { label: "Quotation Being Prepared", order: 3 },
-  QUOTE_SENT: { label: "Quotation Ready", order: 4 },
-  QUOTE_ACCEPTED: { label: "Waiting Your Approval", order: 5 },
-  BOOKING_CONFIRMED: { label: "Confirmed", order: 6 },
-  WAITING_ASSIGNMENT: { label: "Confirmed", order: 6 },
-  VEHICLE_ASSIGNED: { label: "Vehicle Assigned", order: 7 },
-  DRIVER_ASSIGNED: { label: "Driver Assigned", order: 8 },
-  READY_FOR_DISPATCH: { label: "Trip Ready", order: 9 },
-  TRIP_STARTED: { label: "Trip Started", order: 10 },
-  PICKUP_COMPLETED: { label: "In Progress", order: 11 },
-  DROP_COMPLETED: { label: "In Progress", order: 11 },
-  TRIP_COMPLETED: { label: "Completed", order: 12 },
-  CANCELLED: { label: "Cancelled", order: 99 },
-  CLOSED: { label: "Closed", order: 13 },
-};
+import { checkTransition, requiresStartOtp, TRIP_STATUS_FOR_BOOKING } from "@/lib/booking-lifecycle";
+import { getCustomerFacingStatus, getCustomerTimeline } from "@/lib/customer-timeline";
+import type { BookingStatus, TripStatus } from "@prisma/client";
 
 export async function PUT(
   req: Request,
@@ -85,94 +17,97 @@ export async function PUT(
   }
 
   try {
-    const { status: newStatus, reason, vehicleId, driverId } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const newStatus = typeof body.status === "string" ? body.status : "";
+    const reason = typeof body.reason === "string" ? body.reason : null;
+    const otp = typeof body.otp === "string" ? body.otp.trim() : "";
     const userId = session.user.id;
     const role = session.user.role;
 
-    const booking = await prisma.booking.findUnique({ where: { id } });
+    if (!newStatus) {
+      return NextResponse.json({ error: "status is required" }, { status: 400 });
+    }
+
+    const booking = await prisma.booking.findUnique({ where: { id }, include: { trip: true } });
     if (!booking) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
-    // Validate permissions
-    if (role === "CUSTOMER" && booking.customerId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
-    if (role === "DRIVER" && booking.driverId !== userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    const check = checkTransition({ role, userId, booking }, newStatus);
+    if (!check.ok) {
+      return NextResponse.json({ error: check.error }, { status: check.status });
     }
 
-    // Restrict manager-only transitions
-    if (MANAGER_ONLY_SOURCES.includes(booking.status) && !MANAGER_ROLES.includes(role)) {
-      return NextResponse.json({ error: "Only managers can perform this action" }, { status: 403 });
+    // A trip can only start if Dispatch created it (spec §4 Workflow B step 9).
+    if (newStatus === "TRIP_STARTED" && !booking.trip) {
+      return NextResponse.json({ error: "Booking has not been dispatched yet" }, { status: 400 });
     }
 
-    // Validate state transitions
-    const allowedNext = validTransitions[booking.status] || [];
-    if (!allowedNext.includes(newStatus)) {
-      return NextResponse.json(
-        { error: `Cannot transition from ${booking.status} to ${newStatus}` },
-        { status: 400 }
-      );
+    // Customer OTP is verified on the server, never in the browser.
+    // Trips dispatched before OTPs were generated have no OTP and are allowed through.
+    if (requiresStartOtp(role, newStatus) && booking.trip?.otp && booking.trip.otp !== otp) {
+      return NextResponse.json({ error: "Invalid OTP. Ask the customer for the trip OTP." }, { status: 400 });
     }
 
+    const now = new Date();
     const updateData: Record<string, unknown> = { status: newStatus };
+    if (newStatus === "TRIP_STARTED" || newStatus === "STARTED") updateData.startTime = now;
+    if (newStatus === "TRIP_COMPLETED" || newStatus === "COMPLETED") updateData.endTime = now;
 
-    // Set timestamps on relevant transitions
-    if (newStatus === "TRIP_STARTED" || newStatus === "STARTED") {
-      updateData.startTime = new Date();
-    } else if (newStatus === "TRIP_COMPLETED" || newStatus === "COMPLETED" || newStatus === "DROP_COMPLETED") {
-      updateData.endTime = new Date();
-    } else if (newStatus === "CANCELLED") {
-      await prisma.cancellation.create({
-        data: {
-          bookingId: id,
-          cancelledById: userId,
-          reason: reason || null,
+    const tripStatus = TRIP_STATUS_FOR_BOOKING[newStatus] as TripStatus | undefined;
+    const tripData: Record<string, unknown> = {};
+    if (tripStatus) tripData.status = tripStatus;
+    if (newStatus === "PICKUP_COMPLETED") tripData.actualPickupTime = now;
+    if (newStatus === "DROP_COMPLETED") tripData.actualDropTime = now;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Optimistic concurrency: only update if the status has not changed since we read it.
+      const res = await tx.booking.updateMany({
+        where: { id, status: booking.status },
+        data: updateData as { status: BookingStatus },
+      });
+      if (res.count === 0) {
+        throw new ConflictError("Booking status changed in the meantime. Refresh and try again.");
+      }
+
+      if (newStatus === "CANCELLED") {
+        await tx.cancellation.create({
+          data: { bookingId: id, cancelledById: userId, reason },
+        });
+      }
+
+      if (booking.trip && Object.keys(tripData).length > 0) {
+        await tx.trip.update({ where: { id: booking.trip.id }, data: tripData });
+      }
+
+      return tx.booking.findUniqueOrThrow({
+        where: { id },
+        include: {
+          customer: { select: { id: true, name: true, phone: true } },
+          driver: { select: { id: true, name: true, phone: true } },
+          vehicle: true,
         },
       });
-    }
-
-    // When vehicle is assigned, update booking
-    if ((newStatus === "VEHICLE_ASSIGNED" || newStatus === "DRIVER_ASSIGNED") && vehicleId) {
-      updateData.vehicleId = vehicleId;
-    }
-
-    // When driver is assigned, update booking
-    if (newStatus === "DRIVER_ASSIGNED" && driverId) {
-      updateData.driverId = driverId;
-    }
-
-    // When driver accepts via mobile and no vehicle assigned, auto-assign their vehicle
-    if ((newStatus === "ACCEPTED" || newStatus === "READY_FOR_DISPATCH") && role === "DRIVER" && !booking.vehicleId) {
-      const vehicle = await prisma.vehicle.findFirst({
-        where: { driverId: userId, isActive: true },
-      });
-      if (vehicle) {
-        updateData.vehicleId = vehicle.id;
-      }
-    }
-
-    const updated = await prisma.booking.update({
-      where: { id },
-      data: updateData,
-      include: {
-        customer: { select: { id: true, name: true, phone: true } },
-        driver: { select: { id: true, name: true, phone: true } },
-        vehicle: true,
-      },
     });
 
-    // Emit event (decoupled from notification delivery)
+    // Emit events after commit (notifications, audit log, webhooks are subscribers).
+    const meta = { userId };
     eventBus.emit(createEvent("BOOKING_STATUS_CHANGED", {
-      bookingId: id,
-      newStatus,
-      previousStatus: booking.status,
-      userId,
-    }, { userId }));
+      bookingId: id, newStatus, previousStatus: booking.status, userId,
+    }, meta));
+    if (newStatus === "TRIP_STARTED") eventBus.emit(createEvent("TRIP_STARTED", { bookingId: id, tripId: booking.trip?.id }, meta));
+    if (newStatus === "TRIP_COMPLETED") eventBus.emit(createEvent("TRIP_COMPLETED", { bookingId: id, tripId: booking.trip?.id }, meta));
+    if (newStatus === "CANCELLED") eventBus.emit(createEvent("BOOKING_CANCELLED", { bookingId: id, reason }, meta));
 
-    return NextResponse.json(updated);
+    return NextResponse.json({
+      ...updated,
+      customerFacingStatus: getCustomerFacingStatus(updated.status),
+      timeline: getCustomerTimeline(updated.status),
+    });
   } catch (error) {
+    if (error instanceof ConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     console.error("Error updating booking status:", error);
     return NextResponse.json(
       { error: "Internal server error" },
@@ -180,3 +115,5 @@ export async function PUT(
     );
   }
 }
+
+class ConflictError extends Error {}

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { STAFF_ROLES, hasRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: Request) {
@@ -38,7 +39,7 @@ export async function GET(req: Request) {
       return NextResponse.json(quotations);
     }
 
-    if (session.user.role !== "CUSTOMER") {
+    if (hasRole(session.user.role, STAFF_ROLES)) {
       const quotations = await prisma.quotation.findMany({
         include: {
           booking: {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { STAFF_ROLES, hasRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { generateCsv } from "@/lib/csv-export";
 
@@ -7,6 +8,10 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) {
     return new NextResponse("Unauthorized", { status: 401 });
+  }
+  // Exports contain customer PII and financials: back-office staff only (not content editors).
+  if (!hasRole(session.user?.role, STAFF_ROLES.filter((r) => r !== "CONTENT_MANAGER"))) {
+    return new NextResponse("Forbidden", { status: 403 });
   }
 
   const formData = await req.formData();

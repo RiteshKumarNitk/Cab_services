@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { assignDriverToDispatch } from "@/lib/operations-queue";
+import { requireRole, OPS_ROLES } from "@/lib/authz";
+import { assignDriverToDispatch, DispatchError } from "@/lib/operations-queue";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { session, error } = await requireRole(OPS_ROLES);
+  if (error) return error;
 
   try {
     let driverId: string | undefined;
@@ -23,14 +21,17 @@ export async function POST(
       driverId = formData.get("driverId") as string;
     }
 
-    if (!driverId) {
+    if (!driverId || typeof driverId !== "string") {
       return NextResponse.json({ error: "Driver ID required" }, { status: 400 });
     }
 
     const dispatch = await assignDriverToDispatch(id, driverId, session.user.id);
     return NextResponse.json(dispatch);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to assign driver";
-    return NextResponse.json({ error: message }, { status: 400 });
+  } catch (err) {
+    if (err instanceof DispatchError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    console.error("Error assigning driver:", err);
+    return NextResponse.json({ error: "Failed to assign driver" }, { status: 500 });
   }
 }

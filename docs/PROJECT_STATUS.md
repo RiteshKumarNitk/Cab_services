@@ -288,3 +288,28 @@ The project used **npm** (`package-lock.json`, no CI or deployment config). The 
 | Persistent Windows `DATABASE_URL` (User/Machine) | none |
 
 A `P1001` against the old host means `DATABASE_URL` is set in that terminal's process environment, which takes precedence over `.env` (Prisma never overrides an existing variable). Check with `echo $env:DATABASE_URL` and clear it with `Remove-Item Env:DATABASE_URL`, or open a new terminal.
+
+## 10. Session 5 (2026-10-13): end-to-end workflow verification
+
+The core workflow (enquiry → lead → quotation → approval → booking → availability → dispatch → trip → invoice → payment → settlement → close → review) is now **runtime-verified** by an HTTP integration suite against a disposable Neon branch: 32 checks pass, and 5 known gaps are recorded as TODO. Details: TESTING_STATUS §10.
+
+Status changes from this verification:
+* **Booking detail API** (`GET /api/bookings/[id]`) was returning 500 for every booking (pre-existing). Fixed. The customer booking page, driver trip page and admin booking workspace depend on it.
+* **Booking payment status** now follows recorded payments (was never updated). Fixed.
+* Steps 1–10 above move from "code-verified" to "runtime-verified via API". UI flows are still verified by code reading only.
+
+## 11. Session 6 (2026-10-13): quotation pricing and status rules (P2-1)
+
+**Root causes (all in `/api/admin/quotations`):** `POST` stored the client's `totalFare` unchecked and marked the lead `QUOTATION_SENT` while still a draft. `PATCH` allowed any status → any status (only APPROVED/REJECTED were role-checked), accepted price edits in every status including APPROVED, trusted the client total, allowed price and status changes in one request, and had no concurrency control. `DELETE` removed any quotation, including converted ones (unlinking the booking).
+
+**Now enforced server-side** (`src/lib/quotation-rules.ts`, `src/lib/quotations.ts`; routes are thin wrappers):
+* **Totals** use the existing calculator rule: `perKm × km + night + driver + parking + toll + permit + state tax`, GST % on that, minus a ₹ discount. Rounded to paise. A client total must match within ₹0.01, otherwise 400 with the expected amount.
+* **Transitions:** DRAFT → SENT; SENT → UNDER_REVIEW / APPROVED / REJECTED / EXPIRED; UNDER_REVIEW → APPROVED / REJECTED / EXPIRED. APPROVED, REJECTED and EXPIRED are terminal. Managers (SUPER_ADMIN, ADMIN, BOOKING_MANAGER) review, approve, reject and expire. Sending and approving re-validate the stored pricing; approval also checks `validUntil`. Converted quotations can't change.
+* **Price lock:** pricing editable only in DRAFT. Pricing and status can't change in the same request. Only unconverted drafts can be deleted.
+* **Concurrency:** every write is conditional on the row's `status` and `updatedAt` (optimistic lock), giving 409 on conflict.
+* **Conversion** books the approved quotation's stored, validated total (it can't change after approval).
+* **UI:** the quotation page now shows the server's error instead of failing silently.
+
+**No schema change.** Price lines are already columns on `Quotation` (Float, as used across the project). No migration.
+
+**Data note:** the 8 demo quotations in production (`QT-DEMO-*`, from the seed) store GST as a ₹ amount, not a rate, so they break the rule (read-only audit). The seed is fixed for future runs. The existing rows need a data correction, pending approval (D13).

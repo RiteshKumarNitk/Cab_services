@@ -7,7 +7,8 @@ async function onAnyEvent(event: AppEvent) {
       userId: event.metadata?.userId || null,
       action: event.type,
       entity: deriveEntity(event.type),
-      entityId: (event.data?.bookingId || event.data?.leadId || event.data?.paymentId || event.data?.entityId) as string || null,
+      // An explicit entityId names the record the event is about (e.g. a quotation); otherwise infer it.
+      entityId: (event.data?.entityId || event.data?.bookingId || event.data?.leadId || event.data?.paymentId) as string || null,
       metadata: JSON.stringify({
         event,
         data: event.data,

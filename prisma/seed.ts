@@ -48,7 +48,8 @@ async function account(input: {
   return user;
 }
 
-/** Fare breakdown in INR (5% GST, as configured on the pricing page). */
+/** Fare breakdown in INR following the quotation calculator rule (src/lib/quotation-rules.ts):
+ * `gst` is the RATE (5%, as configured on the pricing page); `gstAmount` is the rupee amount. */
 function fare(km: number, perKm: number, extras: { driverAllowance?: number; toll?: number; parking?: number; permit?: number; night?: number; discount?: number } = {}) {
   const baseFare = Math.round(km * perKm);
   const driverAllowance = extras.driverAllowance ?? 0;
@@ -57,9 +58,10 @@ function fare(km: number, perKm: number, extras: { driverAllowance?: number; tol
   const permitCharges = extras.permit ?? 0;
   const nightCharges = extras.night ?? 0;
   const discount = extras.discount ?? 0;
-  const subtotal = baseFare + driverAllowance + tollCharges + parkingCharges + permitCharges + nightCharges - discount;
-  const gst = Math.round(subtotal * 0.05);
-  return { baseFare, perKmCharge: perKm, totalKm: km, driverAllowance, tollCharges, parkingCharges, permitCharges, nightCharges, discount, gst, totalFare: subtotal + gst, subtotal };
+  const subtotal = baseFare + driverAllowance + tollCharges + parkingCharges + permitCharges + nightCharges;
+  const gst = 5;
+  const gstAmount = Math.round(subtotal * gst) / 100;
+  return { baseFare, perKmCharge: perKm, totalKm: km, driverAllowance, tollCharges, parkingCharges, permitCharges, nightCharges, discount, gst, totalFare: subtotal + gstAmount - discount, subtotal, gstAmount };
 }
 
 async function main() {
@@ -384,7 +386,7 @@ async function seedDemoPipeline(branchId: string, people: People, fleet: Fleet) 
     const invoice = await prisma.invoice.create({
       data: {
         invoiceNumber: `INV-DEMO-${pad(invoiceSeq)}`, bookingId: booking.id, customerId: s.customer.id, branchId,
-        status: s.status === "CLOSED" ? "PAID" : "PARTIALLY_PAID", subtotal, gst: s.f.gst, discount: 0, total: s.f.totalFare,
+        status: s.status === "CLOSED" ? "PAID" : "PARTIALLY_PAID", subtotal, gst: s.f.gstAmount, discount: s.f.discount, total: s.f.totalFare,
         paidAmount: s.status === "CLOSED" ? s.f.totalFare : 1000, paymentStatus: s.status === "CLOSED" ? "PAID" : "PARTIAL",
         paymentMethod: s.status === "CLOSED" ? "ONLINE" : "CASH", dueDate: at(s.status === "CLOSED" ? -15 : 5),
         paidAt: s.status === "CLOSED" ? at(-19) : null,
@@ -420,9 +422,9 @@ async function seedDemoPipeline(branchId: string, people: People, fleet: Fleet) 
   console.log("Demo pipeline: 3 open leads, 7 bookings (awaiting, assigned, dispatched, in progress, invoiced, closed, cancelled)");
 }
 
-function omitSubtotal<T extends { subtotal: number }>(f: T): Omit<T, "subtotal"> {
+function omitSubtotal<T extends { subtotal: number; gstAmount: number }>(f: T): Omit<T, "subtotal" | "gstAmount"> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { subtotal, ...rest } = f;
+  const { subtotal, gstAmount, ...rest } = f;
   return rest;
 }
 

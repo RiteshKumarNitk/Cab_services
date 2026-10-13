@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-const QUOTATION_ROLES = ["SUPER_ADMIN", "ADMIN", "BOOKING_MANAGER", "SUPPORT_EXECUTIVE"];
-
-function generateQuotationNumber(): string {
-  return `QT-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-}
+import { QUOTATION_ROLES } from "@/lib/quotation-rules";
+import { createQuotation, QuotationError } from "@/lib/quotations";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -53,58 +49,19 @@ export async function POST(req: Request) {
   const session = await auth();
   const role = (session?.user as { role?: string } | undefined)?.role;
   const userId = (session?.user as { id?: string } | undefined)?.id;
-  if (!role || !QUOTATION_ROLES.includes(role)) {
+  if (!role || !userId || !QUOTATION_ROLES.includes(role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const body = await req.json();
-
-    const quotation = await prisma.quotation.create({
-      data: {
-        quotationNumber: generateQuotationNumber(),
-        status: "DRAFT",
-        leadId: body.leadId ?? null,
-        createdById: userId ?? "",
-        bookingType: body.bookingType ?? "LOCAL",
-        tripType: body.tripType ?? "ONE_WAY",
-        validUntil: body.validUntil ? new Date(body.validUntil) : null,
-        pickupAddress: body.pickupAddress ?? null,
-        dropAddress: body.dropAddress ?? null,
-        pickupDate: body.pickupDate ? new Date(body.pickupDate) : null,
-        returnDate: body.returnDate ? new Date(body.returnDate) : null,
-        passengers: body.passengers ?? null,
-        vehicleType: body.vehicleType ?? null,
-        baseFare: body.baseFare ?? null,
-        perKmCharge: body.perKmCharge ?? null,
-        totalKm: body.totalKm ?? null,
-        nightCharges: body.nightCharges ?? null,
-        driverAllowance: body.driverAllowance ?? null,
-        parkingCharges: body.parkingCharges ?? null,
-        tollCharges: body.tollCharges ?? null,
-        permitCharges: body.permitCharges ?? null,
-        stateTax: body.stateTax ?? null,
-        discount: body.discount ?? null,
-        gst: body.gst ?? null,
-        totalFare: body.totalFare ?? null,
-        notes: body.notes ?? null,
-        branchId: body.branchId ?? null,
-      },
-      include: {
-        lead: { select: { id: true, name: true, phone: true, email: true } },
-        createdBy: { select: { id: true, name: true } },
-      },
-    });
-
-    if (body.leadId) {
-      await prisma.lead.update({
-        where: { id: body.leadId },
-        data: { status: "QUOTATION_SENT" },
-      });
-    }
-
+    // Totals are computed on the server; a client total is accepted only if it matches.
+    const quotation = await createQuotation(body, { id: userId, role });
     return NextResponse.json(quotation, { status: 201 });
   } catch (error) {
+    if (error instanceof QuotationError) {
+      return NextResponse.json({ error: error.message, fields: error.fields }, { status: error.status });
+    }
     console.error("Error creating quotation:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

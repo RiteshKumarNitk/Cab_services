@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { netPaid, invoicePaymentState } from "../finance";
+import { netPaid, invoicePaymentState, bookingPaymentStatus } from "../finance";
 
 describe("netPaid", () => {
   test("sums payments and subtracts refunds", () => {
@@ -34,5 +34,20 @@ describe("invoicePaymentState", () => {
 
   test("cancelled invoices stay cancelled", () => {
     assert.equal(invoicePaymentState({ total: 5460, status: "CANCELLED" }, 5460).status, "CANCELLED");
+  });
+});
+
+describe("bookingPaymentStatus", () => {
+  test("pending, partial and paid against the booking fare", () => {
+    assert.equal(bookingPaymentStatus(3675, 0), "PENDING");
+    assert.equal(bookingPaymentStatus(3675, 1000), "PARTIAL");
+    assert.equal(bookingPaymentStatus(3675, 3675), "PAID");
+    assert.equal(bookingPaymentStatus(3675, 4000), "PAID");
+  });
+
+  test("a refund back to zero is pending again; unknown fare never reports paid", () => {
+    assert.equal(bookingPaymentStatus(3675, -0), "PENDING");
+    assert.equal(bookingPaymentStatus(null, 500), "PARTIAL");
+    assert.equal(bookingPaymentStatus(0, 500), "PARTIAL");
   });
 });

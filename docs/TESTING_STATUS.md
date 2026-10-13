@@ -152,3 +152,85 @@ Production build (`next build`) against the new CarService DB: ✅ exit 0, 135/1
 | 13 | Another driver cannot attach the key | ✅ 400 |
 | 14 | Neon Auth JWKS serves an EdDSA key | ✅ 200 |
 | 15 | Neon Auth `/ok` | ✅ 200 |
+
+## 10. End-to-end workflow integration suite (2026-10-13)
+
+**What:** `tests/integration/workflow.test.ts` drives the full business workflow over HTTP against the production build, with real NextAuth logins for every actor (ops manager, sales executive, finance, 3 drivers, 2 customers). Uses the existing `node:test` + `tsx` setup; no new dependencies.
+
+**Where it runs:** an isolated, disposable Neon branch (`e2e-test-20261013`, copy of `production`, auto-expires 2026-10-15). Never production:
+* `scripts/run-integration.mjs` refuses to start if the test database host equals the host in `.env`/`.env.local` (verified: exit 2 when pointed at production).
+* `tests/integration/helpers.ts` repeats the check before connecting.
+* Branch variables are passed as process env only; project env files are not modified.
+* Every record carries a run id and is deleted afterwards. Read-only residue check: 0 test users/leads/vehicles on the branch and in production. Production unchanged (7 bookings, 18 users).
+
+**How to run:**
+```bash
+neon branches create --project-id small-star-85128616 --name e2e-test --parent production --expires-at <ISO>
+neon env pull --project-id small-star-85128616 --branch e2e-test --file <outside-repo>/e2e.env -s postgres,object-storage
+pnpm build
+pnpm test:integration -- --env-file <outside-repo>/e2e.env
+```
+
+**Result: 32 passed, 0 failed, 5 TODO (known gaps), 55 s.** The first run had 3 failures: 2 real bugs (fixed, below) and 1 wrong test expectation (corrected).
+
+| Step | Verified behaviour |
+|---|---|
+| 1 Enquiry | Public enquiry → `NEW` `WEBSITE` lead; duplicate submission returns the same lead (1 row); invalid input → 400 with field errors |
+| 2 Lead | Sales finds it by phone; customers get 401/403 on the CRM API |
+| 3 Quotation | Sales creates (DRAFT) and sends; sales **cannot** approve (403); ops manager approves (`approvedById` set) |
+| 4 Booking | Conversion refused without an approved quote (400 `requiresQuotation`); approved → exactly one `BOOKING_CONFIRMED` booking, matched to the existing customer by email, fare copied from the quote, dispatch `PENDING`, lead `WON`; repeat call returns the same booking (200) |
+| 5 Availability | Driver before vehicle → 400; vehicle with expired insurance → 400; vehicle already booked that day → 400; driver already assigned that day → 400; **two parallel assignments of one vehicle → exactly one succeeds** |
+| 6 Dispatch | Assignment statuses can't be set via the status API (400); customers can't dispatch (403/401); finalize creates one trip with a 4-digit OTP; repeat finalize returns the same trip; notification and audit-log subscribers fire |
+| 7 Trip | Customer sees the OTP, assigned driver doesn't, other driver/customer get 403; wrong OTP → 400; other driver → 403; customer can't cancel/progress a running trip (403); pickup → drop → complete updates booking and trip (`COMPLETED`, actual times); `TRIP_COMPLETED → TRIP_STARTED` → 400; driver logs an expense |
+| 8 Invoice | Finance-only (401/403 otherwise); total = subtotal + GST − discount; client-sent `paidAmount` ignored (starts 0, PENDING); customer taken from booking; second invoice for the booking → 409; finance moves booking to `INVOICE_GENERATED` |
+| 9 Payment / settlement | Negative amount → 400; advance → invoice `PARTIALLY_PAID`; identical resubmission → same payment id; final payment → invoice `PAID` (paid = total); booking `paymentStatus` → `PAID`; settlement net payable = earnings − advance − expenses; marked paid |
+| 10 Close | Finance closes; other customer can't rate (403); customer rates once, second rating → 409; final record graph consistent (lead, approved quote, fare match, dispatched, trip completed, 1 invoice PAID, payments sum = total, rating) |
+| Pagination | Paged envelope (`total`, `totalPages`), legacy array, status filter; customers/drivers see only their own bookings; payments filter by booking with paging |
+| Security | Customer CSV export → 403; self-registration as ADMIN → 400 |
+
+**Not covered (TODO in the suite, features missing):** auto-invoice on trip completion (P4-4), settlement calculated from persisted data (P4-3), server-side quotation total validation and quotation transition rules (P2-1), customer quotation approval in the portal (P5-2). Also not covered: browser UI flows (no E2E browser tool), object-storage receipt upload inside this suite (covered separately in §9), notifications delivery to external channels (none configured).
+
+### Bugs found by the suite and fixed
+
+| Bug | Impact | Fix |
+|---|---|---|
+| `GET /api/bookings/[id]` returned **500 for every booking**. Prisma rejects `select` + `include` on the same relation (`driver`). Present since the initial commit. | Customer booking page, driver trip page, admin booking workspace and public tracking were all broken | `driver: { select: { …, driverStatus: true } }` in `src/app/api/bookings/[id]/route.ts` |
+| `Booking.paymentStatus` never changed when payments were recorded | Bookings stayed `PENDING` after full payment; the bookings list and reports showed wrong payment state | `recalculateBookingPayment()` in `src/lib/finance.ts`, called in the payment transaction (+2 unit tests) |
+
+### Commands and results (this session)
+
+| Command | Result |
+|---|---|
+| `tsc --noEmit` | ✅ |
+| Unit tests (`pnpm test`) | ✅ 54/54 |
+| Integration (`pnpm test:integration -- --env-file …`) | ✅ 32 pass, 0 fail, 5 todo |
+| ESLint (`src`) | 25 errors / 171 warnings, all pre-existing; new/changed files: 0 problems |
+| `next build` | ✅ 140/140 static pages |
+| `prisma validate` | ✅ |
+| `prisma migrate status` (production, read-only) | ✅ up to date, 2 migrations |
+| Runner guard against production `.env` | ✅ refused (exit 2) |
+
+## 11. Quotation pricing and status rules (2026-10-13)
+
+**Suites:** `src/lib/__tests__/quotation-rules.test.ts` (17 unit tests) and `tests/integration/quotations.test.ts` (18 HTTP tests on the guarded Neon test branch). `workflow.test.ts` fixtures moved to the calculator rule (₹3,990 example), and its two quotation TODOs are now real tests.
+
+| Command | Result |
+|---|---|
+| `tsc --noEmit` | ✅ |
+| Unit tests | ✅ 71/71 |
+| Integration (both suites) | ✅ 50 pass, 0 fail, 3 TODO (auto-invoice P4-4, settlement calc P4-3, customer portal approval P5-2) |
+| `next build` | ✅ 140/140 |
+| ESLint `src` | 25 errors / 171 warnings, identical to before. All 13 warnings in touched files pre-existed (unused imports in the quotation page, unused variables in the seed content block) |
+| Residue (read-only) | 0 test users on branch and production |
+
+Integration coverage:
+
+| Area | Tests |
+|---|---|
+| Totals | computed when omitted; matching client total accepted; tampered total → 400 with expected amount; negative line, GST > 28 %, discount > subtotal + GST → 400; draft edit recomputes (₹4,200), wrong total in edit → 400 and nothing stored; unpriced draft cannot be sent; legacy row with inconsistent stored total cannot be sent |
+| Transitions | draft creation leaves lead `NEW`, sending sets `QUOTATION_SENT`; sales cannot approve/reject (403); customer/driver/anonymous → 401; DRAFT → APPROVED, APPROVED → DRAFT/SENT/REJECTED, REJECTED → SENT → 400; approval past `validUntil` → 400; approval audit-logged with approver |
+| Price lock | price/line edits after SENT or APPROVED → 409 (`totalFare`, `discount`, `perKmCharge`, `gst`, `baseFare`); price change combined with a status change → 400; approved quote cannot be deleted (409); draft can |
+| Conversion | 3 parallel conversions → 1 booking; booking `totalFare` = approved ₹3,990; converted quote frozen (status change and delete → 409) |
+| Concurrency | simultaneous approve + reject → exactly one wins (other 400/409); simultaneous edit + send → stored total always matches stored lines |
+
+**Found while testing:** approval audit entries were filed under the lead, because the audit logger preferred `leadId` over an explicit `entityId`. Fixed in `src/lib/audit-logger.ts`; only the quotation events set `entityId`, so no other audit entries change.

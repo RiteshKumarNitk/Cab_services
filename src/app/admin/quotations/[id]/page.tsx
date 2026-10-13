@@ -25,6 +25,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatDateTime } from "@/lib/utils";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   Send,
@@ -150,6 +151,17 @@ export default function QuotationDetailPage() {
     }
   }
 
+  // The server validates totals, transitions and the pricing lock; show its reason when it refuses.
+  async function reportResult(res: Response, success: string) {
+    if (res.ok) {
+      toast.success(success);
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    const detail = data.fields ? Object.values(data.fields as Record<string, string>)[0] : "";
+    toast.error([data.error ?? "Request failed", detail].filter(Boolean).join(": "));
+  }
+
   async function handleSave() {
     setSaving(true);
     const vehicleCharge = pricing.perKmCharge * pricing.totalKm;
@@ -158,21 +170,23 @@ export default function QuotationDetailPage() {
     const gstAmount = subtotal * (pricing.gst / 100);
     const totalFare = subtotal + gstAmount - pricing.discount;
 
-    await fetch(`/api/admin/quotations/${params.id}`, {
+    const res = await fetch(`/api/admin/quotations/${params.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...pricing, totalFare }),
     });
     setSaving(false);
+    await reportResult(res, "Quotation saved");
     fetchQuotation();
   }
 
   async function handleStatusChange(status: string) {
-    await fetch(`/api/admin/quotations/${params.id}`, {
+    const res = await fetch(`/api/admin/quotations/${params.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status, rejectionReason: status === "REJECTED" ? rejectReason : undefined }),
     });
+    await reportResult(res, `Quotation ${status.toLowerCase()}`);
     setRejectDialogOpen(false);
     fetchQuotation();
   }

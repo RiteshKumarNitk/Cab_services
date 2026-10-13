@@ -5,7 +5,7 @@ import { parsePageParams, listResponse } from "@/lib/pagination";
 import { eventBus, createEvent } from "@/lib/event-bus";
 
 import { FINANCE_ROLES, FINANCE_READ_ROLES, hasRole } from "@/lib/authz";
-import { recalculateInvoicePaid } from "@/lib/finance";
+import { recalculateBookingPayment, recalculateInvoicePaid } from "@/lib/finance";
 
 const READ_ROLES = FINANCE_READ_ROLES;
 const PAYMENT_TYPES = ["ADVANCE", "FULL", "INSTALLMENT", "REFUND", "SECURITY_DEPOSIT"];
@@ -111,8 +111,9 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Keep the invoice balance derived from actual recorded payments.
+      // Keep the invoice balance and the booking's payment status derived from actual recorded payments.
       if (invoiceId) await recalculateInvoicePaid(tx, invoiceId);
+      if (bookingId) await recalculateBookingPayment(tx, bookingId);
       return payment;
     });
 

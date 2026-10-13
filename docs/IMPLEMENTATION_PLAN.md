@@ -22,6 +22,9 @@ When a dependency forces a different order, the reason is given in the task.
 | **D8** | ~~Is the Neon database in `.env` production?~~ **Answered 2026-10-13: yes, production.** Superseded the same day: the app moved to the new Neon project CarService (see PROJECT_STATUS §9), where both migrations are applied. | Migrations are applied with `migrate deploy` only. Development needs its own DB (Neon branch). | |
 | **D9** | Migrate login from NextAuth to Neon Auth (Managed Better Auth)? Neon Auth is provisioned but unused. | Two auth systems side by side would be confusing. A migration moves all users, roles and sessions. | Keep NextAuth unless you need Neon Auth features (OAuth, magic links, MFA, organizations) |
 | **D10** | Seed or migrate data into the new CarService DB (vehicles, pricing, CMS content, staff accounts)? It is empty. | The site shows default or empty content, and nobody can log in until staff accounts exist | Create staff accounts with a one-off script and strong passwords, not `prisma db seed` (fixed demo passwords). Copy vehicles and CMS rows from the old DB if they are real. |
+| **D11** | Is `Quotation.baseFare` part of the price? The calculator shows a "Base Fare (₹)" input but leaves it out of the total; the server now matches the calculator. | Including it would change every quote total | Keep it out (current behaviour) and relabel it in the UI, or define it as a minimum fare |
+| **D12** | Quotation transitions not covered by the existing UI: may a SENT quote go back to DRAFT for revision? Should quotes auto-EXPIRE after `validUntil`? Must the approver differ from the creator (four-eyes)? | Currently: no revision path (create a new quote), expiry only blocks approval, managers may approve their own quotes | Add SENT → DRAFT for managers; nightly expiry job; four-eyes only if the business requires it |
+| **D13** | Correct the 8 `QT-DEMO-*` quotations in production (GST stored as ₹ amount instead of %)? | QT-DEMO-003 (SENT) cannot be approved, and all 8 show a wrong GST % in the UI | Set `gst = 5` on all 8 and recompute `totalFare` on the unconverted QT-DEMO-003 only. Leave converted bookings and invoices untouched (paise-level differences on frozen quotes). |
 
 ---
 
@@ -30,7 +33,7 @@ When a dependency forces a different order, the reason is given in the task.
 | ID | Task | Acceptance criteria | Validation |
 |---|---|---|---|
 | P1-1 | ✅ **Prepared 2026-10-13, apply pending:** `0_init` generated and drift-checked (prod matches); index migration added. Remaining: run `pnpm prisma:deploy` steps in TESTING_STATUS §8 / README. Original task: | P1-1 | Baseline Prisma migrations. Generate `prisma/migrations/0_init` from the current schema with `prisma migrate diff --from-empty`, then mark it applied on existing DBs with `migrate resolve --applied`. **Non-destructive; needs D8 first.** | `prisma migrate status` is clean on dev and prod. Future changes go through `migrate dev` / `migrate deploy`. | Run against a copy of prod first |
-| P1-2 | Separate test database plus DB-backed integration tests for the services in `src/lib` (conversion, dispatch, status, payments) | The tests in the "Integration tests to add" section of TESTING_STATUS.md pass | `npm test` with `DATABASE_URL` pointing at the test DB |
+| P1-2 | 🟡 **Partly done 2026-10-13:** HTTP integration suite on a disposable Neon branch (`pnpm test:integration`, TESTING_STATUS §10). Remaining: run it in CI (P1-3), add browser E2E. Original task: Separate test database plus DB-backed integration tests for the services in `src/lib` (conversion, dispatch, status, payments) | The tests in the "Integration tests to add" section of TESTING_STATUS.md pass | `npm test` with `DATABASE_URL` pointing at the test DB |
 | P1-3 | CI workflow: install, `typecheck`, `lint`, `test`, `build` | CI is red on any failure | GitHub Actions run on a PR |
 | P1-4 | Fix the 25 pre-existing lint errors (`no-explicit-any` in the CSV export, React 19 hook-purity rules on several pages) | `eslint src` reports 0 errors | `npm run lint` |
 | P1-5 | Build must not cache empty CMS pages: fail the build or skip prerender when the DB is unreachable | No `PrismaClientInitializationError` in build logs on CI with a test DB | `next build` |
@@ -46,7 +49,7 @@ Remaining:
 
 | ID | Task | Acceptance criteria |
 |---|---|---|
-| P2-1 | Quotation lifecycle: validate transitions (`DRAFT→SENT→APPROVED/REJECTED`, `→EXPIRED`); lock pricing after `APPROVED`; reject approving an expired quote | A `PATCH` with an invalid transition returns 400. Pricing edits on an approved quote return 409. |
+| P2-1 | ✅ **Done 2026-10-13** (PROJECT_STATUS §11, TESTING_STATUS §11). Original task: Quotation lifecycle: validate transitions (`DRAFT→SENT→APPROVED/REJECTED`, `→EXPIRED`); lock pricing after `APPROVED`; reject approving an expired quote | A `PATCH` with an invalid transition returns 400. Pricing edits on an approved quote return 409. |
 | P2-2 | Lock down `PATCH/DELETE /api/admin/trips/[id]`: status changes go through `bookings/[id]/status`; vehicle/driver changes go through availability checks; replace hard delete with cancel | No trip status change without the matching booking status. No delete of trips that have payments or expenses. |
 | P2-3 | Implement D5 (remove or replace "mark paid") | `Booking.paymentStatus` derived from recorded payments |
 | P2-4 | Rate limiting on `/api/auth/*`, `/api/enquiries`, `/api/contact` (DB- or Redis-backed) | 429 after N requests per IP per window |

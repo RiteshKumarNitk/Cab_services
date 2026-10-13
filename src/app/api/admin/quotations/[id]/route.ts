@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-const QUOTATION_ROLES = ["SUPER_ADMIN", "ADMIN", "BOOKING_MANAGER", "SUPPORT_EXECUTIVE"];
-const APPROVER_ROLES = ["SUPER_ADMIN", "ADMIN", "BOOKING_MANAGER"];
+import { QUOTATION_ROLES } from "@/lib/quotation-rules";
+import { deleteQuotation, QuotationError, updateQuotation } from "@/lib/quotations";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -48,49 +47,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const session = await auth();
   const role = (session?.user as { role?: string } | undefined)?.role;
   const userId = (session?.user as { id?: string } | undefined)?.id;
-  if (!role || !QUOTATION_ROLES.includes(role)) {
+  if (!role || !userId || !QUOTATION_ROLES.includes(role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const body = await req.json();
-    const updateData: Record<string, unknown> = {};
-
-    if (body.status) {
-      if ((body.status === "APPROVED" || body.status === "REJECTED") && !APPROVER_ROLES.includes(role)) {
-        return NextResponse.json({ error: "Only managers can approve/reject quotations" }, { status: 403 });
-      }
-      updateData.status = body.status;
-      if (body.status === "APPROVED") {
-        updateData.approvedById = userId;
-        updateData.approvedAt = new Date();
-      }
-      if (body.status === "REJECTED") {
-        updateData.rejectionReason = body.rejectionReason ?? null;
-      }
-    }
-
-    if (body.baseFare !== undefined) updateData.baseFare = body.baseFare;
-    if (body.perKmCharge !== undefined) updateData.perKmCharge = body.perKmCharge;
-    if (body.totalKm !== undefined) updateData.totalKm = body.totalKm;
-    if (body.nightCharges !== undefined) updateData.nightCharges = body.nightCharges;
-    if (body.driverAllowance !== undefined) updateData.driverAllowance = body.driverAllowance;
-    if (body.parkingCharges !== undefined) updateData.parkingCharges = body.parkingCharges;
-    if (body.tollCharges !== undefined) updateData.tollCharges = body.tollCharges;
-    if (body.permitCharges !== undefined) updateData.permitCharges = body.permitCharges;
-    if (body.stateTax !== undefined) updateData.stateTax = body.stateTax;
-    if (body.discount !== undefined) updateData.discount = body.discount;
-    if (body.gst !== undefined) updateData.gst = body.gst;
-    if (body.totalFare !== undefined) updateData.totalFare = body.totalFare;
-    if (body.notes !== undefined) updateData.notes = body.notes;
-
-    const quotation = await prisma.quotation.update({
-      where: { id },
-      data: updateData,
-    });
-
+    // One request either edits pricing/notes (DRAFT only) or changes status (validated transition).
+    const quotation = await updateQuotation(id, body, { id: userId, role });
     return NextResponse.json(quotation);
   } catch (error) {
+    if (error instanceof QuotationError) {
+      return NextResponse.json({ error: error.message, fields: error.fields }, { status: error.status });
+    }
     console.error("Error updating quotation:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
@@ -105,9 +74,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   try {
-    await prisma.quotation.delete({ where: { id } });
+    await deleteQuotation(id);
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof QuotationError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Error deleting quotation:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

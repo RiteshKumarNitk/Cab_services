@@ -21,11 +21,10 @@ export async function GET(
         customer: {
           select: { id: true, name: true, phone: true, email: true },
         },
+        // Prisma rejects `select` and `include` together on one relation; that made this
+        // endpoint return 500 for every booking.
         driver: {
-          select: { id: true, name: true, phone: true },
-          include: {
-            driverStatus: true,
-          },
+          select: { id: true, name: true, phone: true, driverStatus: true },
         },
         vehicle: true,
         trip: true,

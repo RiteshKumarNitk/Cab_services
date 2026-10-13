@@ -21,6 +21,23 @@ export function invoicePaymentState(
   return { paidAmount: paid, paymentStatus, status };
 }
 
+/** Booking.paymentStatus implied by the amount received against the booking's fare. */
+export function bookingPaymentStatus(totalFare: number | null | undefined, paid: number): PaymentStatus {
+  if (paid <= 0) return "PENDING";
+  if (totalFare && paid >= totalFare) return "PAID";
+  return "PARTIAL";
+}
+
+/** Recompute a booking's payment status from all payments recorded against it. */
+export async function recalculateBookingPayment(tx: Prisma.TransactionClient, bookingId: string) {
+  const booking = await tx.booking.findUniqueOrThrow({
+    where: { id: bookingId },
+    select: { totalFare: true, fare: true, payments: { select: { amount: true, type: true } } },
+  });
+  const status = bookingPaymentStatus(booking.totalFare ?? booking.fare, netPaid(booking.payments));
+  return tx.booking.update({ where: { id: bookingId }, data: { paymentStatus: status } });
+}
+
 /** Recompute an invoice's paid amount and status from its recorded payments. */
 export async function recalculateInvoicePaid(tx: Prisma.TransactionClient, invoiceId: string) {
   const invoice = await tx.invoice.findUniqueOrThrow({

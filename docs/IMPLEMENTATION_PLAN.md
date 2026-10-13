@@ -25,6 +25,7 @@ When a dependency forces a different order, the reason is given in the task.
 | **D11** | Is `Quotation.baseFare` part of the price? The calculator shows a "Base Fare (₹)" input but leaves it out of the total; the server now matches the calculator. | Including it would change every quote total | Keep it out (current behaviour) and relabel it in the UI, or define it as a minimum fare |
 | **D12** | Quotation transitions not covered by the existing UI: may a SENT quote go back to DRAFT for revision? Should quotes auto-EXPIRE after `validUntil`? Must the approver differ from the creator (four-eyes)? | Currently: no revision path (create a new quote), expiry only blocks approval, managers may approve their own quotes | Add SENT → DRAFT for managers; nightly expiry job; four-eyes only if the business requires it |
 | **D13** | Correct the 8 `QT-DEMO-*` quotations in production (GST stored as ₹ amount instead of %)? | QT-DEMO-003 (SENT) cannot be approved, and all 8 show a wrong GST % in the UI | Set `gst = 5` on all 8 and recompute `totalFare` on the unconverted QT-DEMO-003 only. Leave converted bookings and invoices untouched (paise-level differences on frozen quotes). |
+| **D14** | When a trip completes and an invoice is auto-generated, should advance payments already recorded against the booking (without an invoice) be linked to that invoice? | Otherwise the invoice shows ₹0 paid while the customer has paid an advance | Yes: link the booking's unlinked payments to the new invoice in the same transaction and recompute its balance |
 
 ---
 
@@ -78,7 +79,7 @@ Remaining:
 | P4-1 | Maintenance module (replace the "Coming Soon" stub): schedule, complete, cost → `Expense` | A scheduled maintenance blocks assignment (already enforced). Completing it unblocks. |
 | P4-2 | Driver workspace: leave (request/approve), shifts, attendance, trips, ratings, incidents (admin review). Needs an API for `DriverLeave` / `DriverShift`. | Spec §5.5. Approved leave blocks assignment (already enforced). |
 | P4-3 | Settlement calculation from persisted data: completed trips × driver pay rule (**needs the business rule**), minus advances, plus or minus trip expenses. Idempotent per driver per period. | Re-running for the same period does not duplicate. Driver earnings page reads settlements. |
-| P4-4 | Auto-generate the invoice on `TRIP_COMPLETED` (spec §9 rule) through an idempotent event subscriber that respects the one-active-invoice-per-booking rule | Exactly one invoice per completed booking, created as `DRAFT`, never marked paid |
+| P4-4 | ✅ **Done 2026-10-13** (PROJECT_STATUS §12, TESTING_STATUS §12). Original task: Auto-generate the invoice on `TRIP_COMPLETED` (spec §9 rule) through an idempotent event subscriber that respects the one-active-invoice-per-booking rule | Exactly one invoice per completed booking, created as `DRAFT`, never marked paid |
 | P4-5 | Invoice/receipt PDF and print view | Downloadable PDF with GST breakdown |
 | P4-6 | Fleet expenses: fix the `?type=` vs `category` mismatch on the fuel page; give `FLEET_MANAGER` write access to expenses (permission matrix) | Fuel page shows only fuel expenses |
 | P4-7 | Document expiry reminders (daily job → notifications) | Notification created 30/7/1 days before expiry |

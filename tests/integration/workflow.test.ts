@@ -250,7 +250,8 @@ describe("7. Trip execution", () => {
       assert.equal(r.status, 200, `${status}: ${JSON.stringify(r.json)}`);
     }
     const b = await prisma.booking.findUniqueOrThrow({ where: { id: S.bookingId }, include: { trip: true } });
-    assert.equal(b.status, "TRIP_COMPLETED");
+    // Completion auto-generates the invoice (spec §9), moving the booking to INVOICE_GENERATED.
+    assert.equal(b.status, "INVOICE_GENERATED");
     assert.ok(b.startTime && b.endTime);
     assert.equal(b.trip?.status, "COMPLETED");
     assert.ok(b.trip?.actualPickupTime && b.trip?.actualDropTime);
@@ -259,7 +260,7 @@ describe("7. Trip execution", () => {
   test("invalid transitions are rejected", async () => {
     const r = await A.driver1.client.put(`/api/bookings/${S.bookingId}/status`, { status: "TRIP_STARTED" });
     assert.equal(r.status, 400);
-    assert.match(r.json.error, /Cannot transition from TRIP_COMPLETED/);
+    assert.match(r.json.error, /Cannot transition from INVOICE_GENERATED/);
   });
 
   test("driver logs a trip expense", async () => {
@@ -277,20 +278,36 @@ describe("8-9. Invoice, payments, settlement", () => {
     assert.equal((await A.customer.client.post("/api/admin/payments", { bookingId: S.bookingId, amount: 1 })).status, 401);
   });
 
-  test("invoice: created unpaid with correct total; a second invoice for the booking is refused", async () => {
-    const r = await A.finance.client.post("/api/admin/invoices", { bookingId: S.bookingId, subtotal: 3800, gst: 190, discount: 0, dueDate: ymd(day(7)), paidAmount: 9999 });
-    assert.equal(r.status, 201, JSON.stringify(r.json));
-    assert.equal(r.json.total, 3990);
-    assert.equal(r.json.paidAmount, 0, "client-supplied paidAmount must be ignored");
-    assert.equal(r.json.paymentStatus, "PENDING");
-    assert.equal(r.json.customerId, A.customer.user.id, "customer comes from the booking");
-    S.invoice = r.json;
-    assert.equal((await A.finance.client.post("/api/admin/invoices", { bookingId: S.bookingId, subtotal: 3800, gst: 190 })).status, 409);
+  test("trip completion generated exactly one unpaid invoice from the approved quotation", async () => {
+    const invoices = await prisma.invoice.findMany({ where: { bookingId: S.bookingId } });
+    assert.equal(invoices.length, 1);
+    const inv = invoices[0];
+    assert.equal(inv.status, "DRAFT");
+    assert.equal(inv.subtotal, 3800);
+    assert.equal(inv.gst, 190);
+    assert.equal(inv.discount, 0);
+    assert.equal(inv.total, 3990);
+    assert.equal(inv.paidAmount, 0, "completion never marks the invoice paid");
+    assert.equal(inv.paymentStatus, "PENDING");
+    assert.equal(inv.customerId, A.customer.user.id, "customer comes from the booking");
+    assert.match(inv.notes ?? "", /Auto-generated/);
+    S.invoice = inv;
   });
 
-  test("booking moves to INVOICE_GENERATED (finance)", async () => {
+  test("manual invoicing: a second invoice for the booking is refused; client paidAmount is ignored", async () => {
+    const dup = await A.finance.client.post("/api/admin/invoices", { bookingId: S.bookingId, subtotal: 3800, gst: 190 });
+    assert.equal(dup.status, 409);
+    assert.equal(dup.json.invoiceId, S.invoice.id);
+    const manual = await A.finance.client.post("/api/admin/invoices", { bookingId: S.b3.bookingId, subtotal: 3800, gst: 190, discount: 0, dueDate: ymd(day(7)), paidAmount: 9999 });
+    assert.equal(manual.status, 201, JSON.stringify(manual.json));
+    assert.equal(manual.json.total, 3990);
+    assert.equal(manual.json.paidAmount, 0, "client-supplied paidAmount must be ignored");
+    assert.equal(manual.json.paymentStatus, "PENDING");
+  });
+
+  test("booking is already INVOICE_GENERATED; finance cannot set it again", async () => {
     const r = await A.finance.client.put(`/api/bookings/${S.bookingId}/status`, { status: "INVOICE_GENERATED" });
-    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.status, 400);
   });
 
   test("payments: validation, duplicate guard, balance tracking", async () => {
@@ -396,7 +413,6 @@ describe("Pagination, filters and data scoping", () => {
 });
 
 describe("Known gaps (not implemented; documented in IMPLEMENTATION_PLAN)", () => {
-  test.todo("invoice is auto-generated when a trip completes (spec §9) — P4-4");
   test.todo("driver settlement is calculated from persisted trips and expenses (spec §4D) — P4-3");
   test.todo("customer can approve a sent quotation from the portal — P5-2");
 });

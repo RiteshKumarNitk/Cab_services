@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parsePageParams, listResponse } from "@/lib/pagination";
 import { eventBus, createEvent } from "@/lib/event-bus";
+import { createInvoiceRecord, findActiveInvoice, lockBookingInvoicing } from "@/lib/invoicing";
 
 import { FINANCE_ROLES, FINANCE_READ_ROLES, hasRole } from "@/lib/authz";
 
@@ -66,61 +67,35 @@ export async function POST(req: NextRequest) {
       const booking = await prisma.booking.findUnique({ where: { id: bookingId }, select: { customerId: true } });
       if (!booking) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
       customerId = booking.customerId;
-
-      // One active invoice per booking: prevents double invoicing on retries.
-      const existing = await prisma.invoice.findFirst({
-        where: { bookingId, status: { not: "CANCELLED" } },
-        select: { id: true, invoiceNumber: true },
-      });
-      if (existing) {
-        return NextResponse.json(
-          { error: `Booking already has invoice ${existing.invoiceNumber}. Cancel it before generating a new one.`, invoiceId: existing.id },
-          { status: 409 }
-        );
-      }
     }
 
     // A new invoice is never paid on creation: paid amounts come only from recorded payments.
     const status = body.status === "SENT" ? "SENT" : "DRAFT";
 
-    let invoice = null;
-    for (let attempt = 0; attempt < 3 && !invoice; attempt++) {
-      const lastInvoice = await prisma.invoice.findFirst({
-        orderBy: { createdAt: "desc" },
-        select: { invoiceNumber: true },
-      });
-      let nextNum = 1;
-      const match = lastInvoice?.invoiceNumber.match(/INV-(\d+)/);
-      if (match) nextNum = parseInt(match[1]) + 1 + attempt;
-      const invoiceNumber = `INV-${String(nextNum).padStart(5, "0")}`;
-
-      try {
-        invoice = await prisma.invoice.create({
-          data: {
-            invoiceNumber,
-            bookingId,
-            customerId,
-            status,
-            subtotal,
-            gst,
-            discount,
-            total,
-            paidAmount: 0,
-            dueDate: body.dueDate ? new Date(body.dueDate) : null,
-            paymentMethod: body.paymentMethod || null,
-            paymentStatus: "PENDING",
-            notes: body.notes || null,
-            branchId: body.branchId || null,
-          },
-        });
-      } catch (err) {
-        // Unique invoice number taken by a concurrent request: retry with the next number.
-        if ((err as { code?: string }).code !== "P2002") throw err;
+    // Same per-booking lock as automatic invoicing on trip completion, so the
+    // one-active-invoice-per-booking rule holds even under concurrent requests.
+    const result = await prisma.$transaction(async (tx) => {
+      if (bookingId) {
+        await lockBookingInvoicing(tx, bookingId);
+        const existing = await findActiveInvoice(tx, bookingId);
+        if (existing) return { existing };
       }
+      const invoice = await createInvoiceRecord(tx, {
+        bookingId, customerId, branchId: body.branchId || null,
+        amounts: { subtotal, gst, discount, total }, status,
+        dueDate: body.dueDate ? new Date(body.dueDate) : null,
+        paymentMethod: body.paymentMethod || null, notes: body.notes || null,
+      });
+      return { invoice };
+    }, { timeout: 20000, maxWait: 10000 });
+
+    if ("existing" in result && result.existing) {
+      return NextResponse.json(
+        { error: `Booking already has invoice ${result.existing.invoiceNumber}. Cancel it before generating a new one.`, invoiceId: result.existing.id },
+        { status: 409 }
+      );
     }
-    if (!invoice) {
-      return NextResponse.json({ error: "Could not allocate an invoice number, please retry" }, { status: 409 });
-    }
+    const invoice = result.invoice!;
 
     eventBus.emit(createEvent("INVOICE_GENERATED", {
       invoiceId: invoice.id,

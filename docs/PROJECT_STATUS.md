@@ -313,3 +313,21 @@ Status changes from this verification:
 **No schema change.** Price lines are already columns on `Quotation` (Float, as used across the project). No migration.
 
 **Data note:** the 8 demo quotations in production (`QT-DEMO-*`, from the seed) store GST as a ₹ amount, not a rate, so they break the rule (read-only audit). The seed is fixed for future runs. The existing rows need a data correction, pending approval (D13).
+
+## 12. Session 7 (2026-10-13): automatic invoice on trip completion (P4-4)
+
+**Authoritative path:** `PUT /api/bookings/[id]/status` with `TRIP_COMPLETED` (assigned driver or ops roles) is the only code that completes a booking. In the **same transaction** it now:
+1. takes a per-booking invoicing lock (`pg_advisory_xact_lock`), also used by the manual `POST /api/admin/invoices`;
+2. reuses an existing active invoice untouched, **or** creates a DRAFT invoice priced from the booking's approved quotation via the server pricing rule (`src/lib/invoicing.ts`, `planAutoInvoice`). The number is allocated under a global lock, the invoice is unpaid, and no payment is recorded;
+3. moves the booking to `INVOICE_GENERATED` (spec §8.1/§9) when an invoice exists.
+
+If the booking has no approved quotation, its pricing is inconsistent, or the booking fare differs from the approved total, the trip **still completes**. The booking stays `TRIP_COMPLETED`, an `INVOICE_SKIPPED` audit event records the reason, and finance invoices manually (existing flow). Any database error during invoicing rolls back the whole completion (verified with an injected failure).
+
+**Concurrency:** optimistic booking-status update (the second completion gets 409), plus the per-booking advisory lock shared by the auto and manual paths (one active invoice per booking), plus a global lock for invoice numbers (replaces the P2002 retry loop).
+
+**Known edge cases (not changed):**
+* Advance payments recorded **before** completion without an `invoiceId` are not linked to the auto-generated invoice, so the invoice shows ₹0 paid while the booking shows PARTIAL. Finance must record later payments against the invoice. Linking them automatically needs a decision (D14).
+* The 8 seeded `QT-DEMO-*` quotations (GST stored as ₹, D13) would be **skipped**, not invoiced, if their bookings were completed.
+* `PATCH /api/admin/trips/[id]` can still set a trip to COMPLETED without touching the booking, so no invoice is created (open P2-2).
+* Auto invoices have no due date (no payment-terms rule exists); finance sets it when sending.
+* Audit/webhook events are emitted after commit and in-process (no outbox, P3-7).

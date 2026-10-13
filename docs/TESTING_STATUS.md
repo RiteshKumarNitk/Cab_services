@@ -234,3 +234,26 @@ Integration coverage:
 | Concurrency | simultaneous approve + reject → exactly one wins (other 400/409); simultaneous edit + send → stored total always matches stored lines |
 
 **Found while testing:** approval audit entries were filed under the lead, because the audit logger preferred `leadId` over an explicit `entityId`. Fixed in `src/lib/audit-logger.ts`; only the quotation events set `entityId`, so no other audit entries change.
+
+## 12. Automatic invoice on trip completion, P4-4 (2026-10-13)
+
+**Suites:** `src/lib/__tests__/invoicing.test.ts` (7 unit tests for `planAutoInvoice`) and `tests/integration/invoicing.test.ts` (7 HTTP tests). `workflow.test.ts` now expects the automatic invoice; its P4-4 TODO became real assertions.
+
+| Command | Result |
+|---|---|
+| `tsc --noEmit` | ✅ |
+| Unit tests | ✅ 78/78 |
+| Integration (workflow + quotations + invoicing) | ✅ **58 pass, 0 fail, 2 TODO** (settlement calculation P4-3, customer portal approval P5-2), 201 s |
+| `next build` | ✅ 140/140 |
+| ESLint `src` | 25 errors / 171 warnings, unchanged; changed/new files: 0 problems |
+| Post-run, read-only | test branch: injected trigger/function removed (0/0), 0 test users. Production: 0 test users, counts unchanged (7 bookings, 2 invoices, 2 payments) |
+
+| Integration test | Verified |
+|---|---|
+| Happy path | `TRIP_COMPLETED` → response `INVOICE_GENERATED`, `autoInvoice.created`; exactly 1 invoice `INV-nnnnn`, DRAFT, subtotal 3800 / GST 190 / discount 90 / total 3900 from the approved quotation (client-sent amounts ignored); paid 0, PENDING; no payment created; booking fare = invoice total; trip COMPLETED; `INVOICE_GENERATED` audit entry. Repeat completion → 400, still 1 invoice |
+| Concurrency | 3 parallel completions (driver ×2 + ops) → exactly one 200, others 400/409, 1 invoice |
+| Existing invoice | Manual invoice + ₹500 payment before completion → `autoInvoice.existing`, invoice and payment rows byte-identical afterwards, still 1 invoice |
+| Not invoiceable | Approved quotation with inconsistent pricing (legacy) → trip completes, booking stays `TRIP_COMPLETED`, `autoInvoice.skipped` with reason, 0 invoices, `INVOICE_SKIPPED` audit entry; manual invoice + finance `INVOICE_GENERATED` still work |
+| Authorization | Customer / other driver → 403, anonymous → 401, driver/customer manual invoice → 401; nothing changed. Ops completing on the driver's behalf → invoice created |
+| Atomicity | A temporary DB trigger on the **test branch** makes the invoice INSERT fail → completion returns 500; booking stays `DROP_COMPLETED`, `endTime` null, trip `REACHED_DESTINATION`, 0 invoices. Trigger removed → retry creates exactly 1 invoice |
+| Numbering | Two parallel completions on different bookings → consecutive, unique invoice numbers |

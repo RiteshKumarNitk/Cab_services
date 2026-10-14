@@ -257,3 +257,27 @@ Integration coverage:
 | Authorization | Customer / other driver → 403, anonymous → 401, driver/customer manual invoice → 401; nothing changed. Ops completing on the driver's behalf → invoice created |
 | Atomicity | A temporary DB trigger on the **test branch** makes the invoice INSERT fail → completion returns 500; booking stays `DROP_COMPLETED`, `endTime` null, trip `REACHED_DESTINATION`, 0 invoices. Trigger removed → retry creates exactly 1 invoice |
 | Numbering | Two parallel completions on different bookings → consecutive, unique invoice numbers |
+
+## 13. D14 advances and P4-3 settlements (2026-10-14)
+
+**Added:** `src/lib/__tests__/settlements.test.ts` (4 unit tests). Two describe blocks in `tests/integration/invoicing.test.ts`: D14 (1 test) and settlements (5 tests). The P4-3 TODO in `workflow.test.ts` is removed.
+
+| Command | Result |
+|---|---|
+| `tsc --noEmit` | ✅ |
+| Unit tests | ✅ 82/82 |
+| `next build` | ✅ 141/141 (adds `/api/admin/settlements/calculate`) |
+| ESLint `src` | 25 errors / 171 warnings, unchanged; new/changed files 0 problems |
+| Integration (3 suites) | ✅ **64 pass, 0 fail, 1 TODO** (P5-2) on the third run. The first two runs each had **one different** failure, both `Can't reach database server` (P1001) against the Neon test branch, which also showed up as a ~540 s runtime instead of ~200 s. Each affected test passed in another run, so these were connectivity drops, not regressions. |
+| Post-run, read-only | test branch: injected trigger/function 0/0, 0 test users. Production: 0 test users, counts unchanged (7 bookings, 2 invoices, 2 payments, 18 users) |
+
+| Integration test | Verified |
+|---|---|
+| D14 | ₹1,000 advance (no invoice) + a ₹100 payment on a cancelled invoice → on completion the new invoice gets the advance (`PARTIALLY_PAID`, paid 1000 of 3900); the cancelled invoice's payment is not moved |
+| Settlement authorization | anonymous 401; driver, customer and ops manager 403 (finance roles only) |
+| Dry run | only the completed trip is eligible (the dropped-but-not-completed one is excluded); earnings 300 (from quotation) + expenses 450 = 750; nothing written |
+| Calculation | negative advance → 400; with ₹200 advance → 1 PENDING settlement: 300 / 450 / 200 / net 550; `SETTLEMENTS_CALCULATED` audit entry |
+| Idempotency and concurrency | re-run → 0 created; after the second trip completes, 3 parallel runs → exactly 1 new settlement (driver total 2) |
+| Follow-up | finance marks a calculated settlement PAID (`paidAt` set); non-driver id → 404 |
+
+**Flakiness note:** the suites make many sequential calls to a remote Neon branch. A transient P1001 fails whichever test is running at that moment. A retry-on-P1001 wrapper in the test helpers (P1-3, CI) would remove the noise.

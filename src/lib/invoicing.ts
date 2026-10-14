@@ -1,5 +1,6 @@
 import type { Prisma, QuotationStatus } from "@prisma/client";
 import { TOTAL_TOLERANCE, roundCurrency, validatePricing, type Pricing } from "./quotation-rules";
+import { recalculateInvoicePaid } from "./finance";
 
 // Invoice generation shared by the automatic path (trip completion, spec §9) and the manual
 // finance endpoint. Rules:
@@ -87,13 +88,14 @@ export async function createInvoiceRecord(tx: Tx, input: {
 }
 
 export type AutoInvoiceResult =
-  | { status: "created"; invoiceId: string; invoiceNumber: string; total: number }
+  | { status: "created"; invoiceId: string; invoiceNumber: string; total: number; linkedPayments: number }
   | { status: "existing"; invoiceId: string; invoiceNumber: string; total: number }
   | { status: "skipped"; reason: string };
 
 /**
  * Run inside the trip-completion transaction. Reuses an existing active invoice (unchanged),
- * otherwise creates one from the approved quotation, otherwise reports why it was skipped.
+ * otherwise creates one from the approved quotation (attaching the booking's unlinked advance
+ * payments), otherwise reports why it was skipped.
  * Any database error propagates so the whole completion rolls back.
  */
 export async function ensureInvoiceOnCompletion(
@@ -115,5 +117,14 @@ export async function ensureInvoiceOnCompletion(
     amounts: plan.amounts,
     notes: `Auto-generated on trip completion from approved quotation ${plan.quotationNumber}.`,
   });
-  return { status: "created", invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, total: invoice.total };
+
+  // D14: advances already recorded against this booking but not yet on any invoice belong to this
+  // invoice. Payments on another invoice are never moved. The balance then follows those payments.
+  const linked = await tx.payment.updateMany({
+    where: { bookingId: booking.id, invoiceId: null },
+    data: { invoiceId: invoice.id },
+  });
+  if (linked.count > 0) await recalculateInvoicePaid(tx, invoice.id);
+
+  return { status: "created", invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, total: invoice.total, linkedPayments: linked.count };
 }

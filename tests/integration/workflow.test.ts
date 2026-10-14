@@ -413,6 +413,6 @@ describe("Pagination, filters and data scoping", () => {
 });
 
 describe("Known gaps (not implemented; documented in IMPLEMENTATION_PLAN)", () => {
-  test.todo("driver settlement is calculated from persisted trips and expenses (spec §4D) — P4-3");
+
   test.todo("customer can approve a sent quotation from the portal — P5-2");
 });

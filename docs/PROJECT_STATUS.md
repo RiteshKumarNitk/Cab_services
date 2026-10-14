@@ -331,3 +331,16 @@ If the booking has no approved quotation, its pricing is inconsistent, or the bo
 * `PATCH /api/admin/trips/[id]` can still set a trip to COMPLETED without touching the booking, so no invoice is created (open P2-2).
 * Auto invoices have no due date (no payment-terms rule exists); finance sets it when sending.
 * Audit/webhook events are emitted after commit and in-process (no outbox, P3-7).
+
+## 13. Session 8 (2026-10-14): advances on auto invoices (D14) and calculated driver settlements (P4-3)
+
+Decisions taken (2026-10-14): **driver pay = the trip's driver allowance (bata)** from the approved quotation; **D14 = yes** (link advances); **D13 = not now** (production demo quotations untouched).
+
+* **D14:** when trip completion auto-creates an invoice, payments already recorded against the booking with no invoice are attached to it in the same transaction, and the balance is recomputed (e.g. ₹1,000 advance → invoice `PARTIALLY_PAID`). Payments already on another invoice (including a cancelled one) are never moved. A reused existing invoice is still left untouched.
+* **P4-3:** `POST /api/admin/settlements/calculate` (finance roles) with `{ driverId, from?, to?, advances?: { tripId: amount }, dryRun? }` creates one `PENDING` settlement per completed, not-yet-settled trip (`src/lib/settlements.ts`):
+  * earnings = approved quotation's `driverAllowance` (falls back to the booking's copy; the source is reported per line);
+  * expenses = what the driver paid for that trip (`Expense.paidById` = driver, linked by trip or booking), reimbursed;
+  * net = earnings + expenses − advance (advance entered by finance; there is no persisted driver-advance record).
+  * Idempotent: trips with any settlement are skipped. A per-driver advisory lock makes concurrent runs settle each trip once. `dryRun` previews without writing. `SETTLEMENTS_CALCULATED` is audit-logged.
+
+**Known limitations:** the existing manual `POST /api/admin/settlements` still computes `net = earnings − advance − expenses` (expenses deducted), the opposite convention for the `expenses` column (D15). The driver earnings page still sums `booking.fare` instead of settlements. `/api/driver/expenses` accepts any `bookingId` (not only the driver's own), though settlements only count the driver's own expenses.

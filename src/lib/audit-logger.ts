@@ -22,7 +22,7 @@ function deriveEntity(type: string): string {
   if (type.startsWith("BOOKING") || type.startsWith("TRIP")) return "Booking";
   if (type.startsWith("LEAD")) return "Lead";
   if (type.startsWith("QUOTATION")) return "Quotation";
-  if (type.startsWith("PAYMENT") || type.startsWith("INVOICE")) return "Finance";
+  if (type.startsWith("PAYMENT") || type.startsWith("INVOICE") || type.startsWith("SETTLEMENT")) return "Finance";
   if (type.startsWith("VEHICLE") || type.startsWith("MAINTENANCE")) return "Vehicle";
   if (type.startsWith("DRIVER")) return "Driver";
   return "System";
@@ -36,7 +36,7 @@ export function initAuditLogger() {
     "VEHICLE_ASSIGNED", "DRIVER_ASSIGNED",
     "DISPATCH_FINALIZED",
     "TRIP_STARTED", "TRIP_COMPLETED",
-    "PAYMENT_RECEIVED", "INVOICE_GENERATED", "INVOICE_SKIPPED",
+    "PAYMENT_RECEIVED", "INVOICE_GENERATED", "INVOICE_SKIPPED", "SETTLEMENTS_CALCULATED",
     "MAINTENANCE_SCHEDULED", "REMINDER_DUE",
   ];
   for (const type of eventTypes) {

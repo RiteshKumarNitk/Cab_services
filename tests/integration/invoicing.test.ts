@@ -31,7 +31,7 @@ after(async () => { await cleanup(); });
 const status = (c: Client, bookingId: string, body: Record<string, unknown>) => c.put(`/api/bookings/${bookingId}/status`, body);
 
 /** Enquiry → approved quotation → booking → dispatch → trip started → pickup → drop (one day per booking). */
-async function bookingAtDrop(label: string) {
+async function bookingAtDrop(label: string, drv = driver, veh?: string) {
   const when = day(2 * nextDay++, 9);
   const enq = await anon.post("/api/enquiries", {
     name: `IT I ${label} ${RUN}`, phone: uniquePhone(), email: customer.user.email,
@@ -50,13 +50,13 @@ async function bookingAtDrop(label: string) {
   assert.equal(conv.status, 201, JSON.stringify(conv.json));
   const bookingId: string = conv.json.id;
   const dispatch = await prisma.dispatch.findUniqueOrThrow({ where: { bookingId } });
-  assert.equal((await ops.client.post(`/api/admin/dispatch/${dispatch.id}/assign-vehicle`, { vehicleId })).status, 200);
-  assert.equal((await ops.client.post(`/api/admin/dispatch/${dispatch.id}/assign-driver`, { driverId: driver.user.id })).status, 200);
+  assert.equal((await ops.client.post(`/api/admin/dispatch/${dispatch.id}/assign-vehicle`, { vehicleId: veh ?? vehicleId })).status, 200);
+  assert.equal((await ops.client.post(`/api/admin/dispatch/${dispatch.id}/assign-driver`, { driverId: drv.user.id })).status, 200);
   const fin = await ops.client.post(`/api/admin/dispatch/${dispatch.id}/finalize`);
   assert.equal(fin.status, 201, JSON.stringify(fin.json));
-  assert.equal((await status(driver.client, bookingId, { status: "TRIP_STARTED", otp: fin.json.otp })).status, 200);
-  assert.equal((await status(driver.client, bookingId, { status: "PICKUP_COMPLETED" })).status, 200);
-  assert.equal((await status(driver.client, bookingId, { status: "DROP_COMPLETED" })).status, 200);
+  assert.equal((await status(drv.client, bookingId, { status: "TRIP_STARTED", otp: fin.json.otp })).status, 200);
+  assert.equal((await status(drv.client, bookingId, { status: "PICKUP_COMPLETED" })).status, 200);
+  assert.equal((await status(drv.client, bookingId, { status: "DROP_COMPLETED" })).status, 200);
   return { bookingId, quotationId: q.json.id as string, tripId: fin.json.id as string };
 }
 
@@ -200,5 +200,99 @@ describe("Automatic invoice on trip completion", () => {
     assert.equal(rb.status, 200, JSON.stringify(rb.json));
     const nums = [ra.json.autoInvoice.invoiceNumber, rb.json.autoInvoice.invoiceNumber].map((n: string) => parseInt(n.slice(4), 10)).sort((x, y) => x - y);
     assert.equal(nums[1] - nums[0], 1, JSON.stringify(nums));
+  });
+});
+
+describe("Advance payments are attached to the auto-generated invoice (D14)", () => {
+  test("unlinked advances move onto the new invoice; payments on a cancelled invoice stay put", async () => {
+    const { bookingId } = await bookingAtDrop("advance");
+    // A cancelled earlier invoice with its own payment: must not be touched.
+    const old = await finance.client.post("/api/admin/invoices", { bookingId, subtotal: 1000, gst: 0 });
+    assert.equal(old.status, 201);
+    const oldPay = await finance.client.post("/api/admin/payments", { bookingId, invoiceId: old.json.id, amount: 100, type: "ADVANCE", method: "CASH", reference: `OLD-${RUN}` });
+    assert.equal(oldPay.status, 201);
+    assert.equal((await finance.client.patch("/api/admin/invoices", { id: old.json.id, status: "CANCELLED" })).status, 200);
+    // An advance recorded against the booking only.
+    const adv = await finance.client.post("/api/admin/payments", { bookingId, amount: 1000, type: "ADVANCE", method: "ONLINE", reference: `ADV-${RUN}` });
+    assert.equal(adv.status, 201);
+
+    const r = await status(driver.client, bookingId, { status: "TRIP_COMPLETED" });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.autoInvoice.status, "created");
+
+    const inv = await prisma.invoice.findFirstOrThrow({ where: { bookingId, status: { not: "CANCELLED" } } });
+    assert.equal((await prisma.payment.findUniqueOrThrow({ where: { id: adv.json.id } })).invoiceId, inv.id);
+    assert.equal((await prisma.payment.findUniqueOrThrow({ where: { id: oldPay.json.id } })).invoiceId, old.json.id, "payment on another invoice is never moved");
+    assert.equal(inv.paidAmount, 1000);
+    assert.equal(inv.status, "PARTIALLY_PAID");
+    assert.equal(inv.paymentStatus, "PARTIAL");
+    assert.equal(inv.total, 3900);
+  });
+});
+
+describe("Driver settlements calculated from trips and expenses (P4-3)", () => {
+  let drv: Awaited<ReturnType<typeof makeUser>>;
+  let tripA: { bookingId: string; tripId: string };
+  let tripB: { bookingId: string; tripId: string };
+
+  test("only finance can calculate settlements", async () => {
+    drv = await makeUser("DRIVER", "i-settle");
+    const veh = (await makeVehicle("SET")).id;
+    tripA = await bookingAtDrop("settleA", drv, veh);
+    tripB = await bookingAtDrop("settleB", drv, veh);
+    // Driver pays a toll on trip A (logged against the booking) and completes it; trip B stays at drop.
+    assert.equal((await drv.client.post("/api/driver/expenses", { amount: 450, category: "TOLL", description: "Toll", bookingId: tripA.bookingId })).status, 201);
+    assert.equal((await status(drv.client, tripA.bookingId, { status: "TRIP_COMPLETED" })).status, 200);
+
+    const body = { driverId: drv.user.id };
+    assert.equal((await anon.post("/api/admin/settlements/calculate", body)).status, 401);
+    assert.equal((await drv.client.post("/api/admin/settlements/calculate", body)).status, 403);
+    assert.equal((await customer.client.post("/api/admin/settlements/calculate", body)).status, 403);
+    assert.equal((await ops.client.post("/api/admin/settlements/calculate", body)).status, 403);
+  });
+
+  test("dry run previews from persisted data and writes nothing", async () => {
+    const r = await finance.client.post("/api/admin/settlements/calculate", { driverId: drv.user.id, dryRun: true });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.lines.length, 1, "only the completed trip is eligible");
+    assert.deepEqual(
+      { trip: r.json.lines[0].tripId, earnings: r.json.lines[0].earnings, expenses: r.json.lines[0].expenses, net: r.json.lines[0].netPayable, src: r.json.lines[0].earningsSource },
+      { trip: tripA.tripId, earnings: 300, expenses: 450, net: 750, src: "quotation" }
+    );
+    assert.equal(await prisma.settlement.count({ where: { driverId: drv.user.id } }), 0);
+  });
+
+  test("calculation creates one pending settlement per completed trip, deducting advances", async () => {
+    assert.equal((await finance.client.post("/api/admin/settlements/calculate", { driverId: drv.user.id, advances: { [tripA.tripId]: -1 } })).status, 400);
+    const r = await finance.client.post("/api/admin/settlements/calculate", { driverId: drv.user.id, advances: { [tripA.tripId]: 200 } });
+    assert.equal(r.status, 201, JSON.stringify(r.json));
+    assert.equal(r.json.settlementIds.length, 1);
+    const s = await prisma.settlement.findUniqueOrThrow({ where: { id: r.json.settlementIds[0] } });
+    assert.deepEqual(
+      { trip: s.tripId, earnings: s.totalEarnings, expenses: s.expenses, advance: s.advancePaid, net: s.netPayable, status: s.status },
+      { trip: tripA.tripId, earnings: 300, expenses: 450, advance: 200, net: 550, status: "PENDING" }
+    );
+    assert.ok(await eventually(() => prisma.auditLog.findFirst({ where: { entityId: drv.user.id, action: "SETTLEMENTS_CALCULATED" } })));
+  });
+
+  test("re-running never settles a trip twice; concurrent runs settle a new trip once", async () => {
+    const again = await finance.client.post("/api/admin/settlements/calculate", { driverId: drv.user.id });
+    assert.equal(again.status, 200);
+    assert.equal(again.json.settlementIds.length, 0);
+
+    assert.equal((await status(drv.client, tripB.bookingId, { status: "TRIP_COMPLETED" })).status, 200);
+    const runs = await Promise.all([1, 2, 3].map(() => finance.client.post("/api/admin/settlements/calculate", { driverId: drv.user.id })));
+    assert.ok(runs.every((r) => r.status === 200 || r.status === 201), JSON.stringify(runs.map((r) => r.status)));
+    assert.equal(runs.reduce((n, r) => n + r.json.settlementIds.length, 0), 1);
+    assert.equal(await prisma.settlement.count({ where: { tripId: tripB.tripId } }), 1);
+    assert.equal(await prisma.settlement.count({ where: { driverId: drv.user.id } }), 2);
+  });
+
+  test("finance marks a calculated settlement paid; unknown drivers are rejected", async () => {
+    const s = await prisma.settlement.findFirstOrThrow({ where: { tripId: tripA.tripId } });
+    const paid = await finance.client.patch("/api/admin/settlements", { id: s.id, status: "PAID" });
+    assert.equal(paid.status, 200);
+    assert.ok(paid.json.paidAt);
+    assert.equal((await finance.client.post("/api/admin/settlements/calculate", { driverId: ops.user.id })).status, 404);
   });
 });
